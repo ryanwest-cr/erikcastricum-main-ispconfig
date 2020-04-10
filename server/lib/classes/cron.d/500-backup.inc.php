@@ -33,6 +33,11 @@ class cronjob_backup extends cronjob {
 	// job schedule
 	protected $_schedule = '0 0 * * *';
 
+	/**
+	 * The maximum number of backups that ISPConfig can store.
+	 */
+	const max_backups = 30;
+
 	/* this function is optional if it contains no custom code */
 	public function onPrepare() {
 		global $app;
@@ -127,9 +132,7 @@ class cronjob_backup extends cronjob {
 							if($backup_mode == 'userzip') {
 								//* Create a .zip backup as web user and include also files owned by apache / nginx user
 								$web_backup_file = 'web'.$web_id.'_'.date('Y-m-d_H-i').'.zip';
-								$app->system->exec_safe('cd ? && sudo -u ? find . -group ? -print 2> /dev/null | zip -b ? --exclude=./backup\*'.$backup_excludes.' --symlinks ? -@', $web_path, $web_user, $web_group, $backup_tmp, $web_backup_dir.'/'.$web_backup_file);
-								$retval = $app->system->last_exec_retcode();
-								if($retval == 0 || $retval == 12) $app->system->exec_safe('cd ? && sudo -u ? find . -user ? -print 2> /dev/null | zip -b ? --exclude=./backup\*'.$backup_excludes.' --update --symlinks ? -@', $web_path, $web_user, $http_server_user, $backup_tmp, $web_backup_dir.'/'.$web_backup_file);
+								$app->system->exec_safe('cd ? && sudo -u ? find . -group ? -or -user ? -print 2> /dev/null | zip -b ? --exclude=./backup\*'.$backup_excludes.' --symlinks ? -@', $web_path, $web_user, $web_group, $http_server_user, $backup_tmp, $web_backup_dir.'/'.$web_backup_file);
 								$retval = $app->system->last_exec_retcode();
 							} else {
 								//* Create a tar.gz backup as root user
@@ -177,7 +180,7 @@ class cronjob_backup extends cronjob {
 
 							rsort($files);
 
-							for ($n = $backup_copies; $n <= 10; $n++) {
+							for ($n = $backup_copies; $n <= self::max_backups; $n++) {
 								if(isset($files[$n]) && is_file($web_backup_dir.'/'.$files[$n])) {
 									$sql = "DELETE FROM web_backup WHERE server_id = ? AND parent_domain_id = ? AND filename = ?";
 									$app->db->query($sql, $conf['server_id'], $web_id, $files[$n]);
@@ -306,7 +309,7 @@ class cronjob_backup extends cronjob {
 							reset($files);
 							foreach($files as $db_name => $filelist) {
 								rsort($filelist);
-								for ($n = $backup_copies; $n <= 10; $n++) {
+								for ($n = $backup_copies; $n <= self::max_backups; $n++) {
 									if(isset($filelist[$n]) && is_file($db_backup_dir.'/'.$filelist[$n])) {
 										$sql = "DELETE FROM web_backup WHERE server_id = ? AND parent_domain_id = ? AND filename = ?";
 										$app->db->query($sql, $conf['server_id'], $web_id, $filelist[$n]);

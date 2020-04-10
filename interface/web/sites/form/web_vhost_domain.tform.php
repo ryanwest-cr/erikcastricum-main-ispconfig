@@ -668,7 +668,7 @@ if ($backup_available) {
 				'datatype' => 'INTEGER',
 				'formtype' => 'SELECT',
 				'default' => '',
-				'value'  => array('1' => '1', '2' => '2', '3' => '3', '4' => '4', '5' => '5', '6' => '6', '7' => '7', '8' => '8', '9' => '9', '10' => '10')
+				'value'  => array('1' => '1', '2' => '2', '3' => '3', '4' => '4', '5' => '5', '6' => '6', '7' => '7', '8' => '8', '9' => '9', '10' => '10', '15' => '15', '20' => '20', '30' => '30')
 			),
 			'backup_excludes' => array (
 				'datatype' => 'VARCHAR',
@@ -765,6 +765,12 @@ if($_SESSION["s"]["user"]["typ"] == 'admin'
 				'value'  => '',
 				'width'  => '30',
 				'maxlength' => '255'
+			),
+			'proxy_protocol' => array (
+				'datatype' => 'VARCHAR',
+				'formtype' => 'CHECKBOX',
+				'default' => 'y',
+				'value' => array(0 => 'n',1 => 'y')
 			),
 			'php_fpm_use_socket' => array (
 				'datatype' => 'VARCHAR',
