@@ -1,4 +1,5 @@
 <?php
+$wb['system_config_title'] = 'System Config';
 $wb['system_config_desc_txt'] = '';
 $wb['smtp_missing_admin_mail_txt'] = 'Please enter the admin name and admin mail address if you want to use smtp mail sending.';
 $wb['dashboard_atom_url_admin_txt'] = 'Dashboard atom feed URL (admin)';
@@ -76,6 +77,10 @@ $wb['session_allow_endless_txt'] = 'Enable "stay logged in"';
 $wb['No'] = 'No';
 $wb['min_password_length_txt'] = 'Minimum password length';
 $wb['min_password_strength_txt'] = 'Minimum password strength';
+$wb['ssh_authentication_txt'] = 'Allowed SSH authentication';
+$wb['ssh_authentication_password_key'] = 'Password & Key';
+$wb['ssh_authentication_password'] = 'Password';
+$wb['ssh_authentication_key'] = 'Key';
 $wb["default_mailserver_txt"] = 'Default Mailserver';
 $wb["default_webserver_txt"] = 'Default Webserver';
 $wb["default_dnsserver_txt"] = 'Default DNS Server';

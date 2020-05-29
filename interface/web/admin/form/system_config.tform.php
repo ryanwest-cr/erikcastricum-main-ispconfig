@@ -33,7 +33,7 @@
 
 */
 
-$form["title"]   = "System Config";
+$form["title"]   = "system_config_title";
 $form["description"]  = "system_config_desc_txt";
 $form["name"]   = "system_config";
 $form["action"]  = "system_config_edit.php";
@@ -747,6 +747,12 @@ $form["tabs"]['misc'] = array (
 			'formtype' => 'SELECT',
 			'default' => '',
 			'value'  => array('' => 'None', '1' => 'strength_1', '2' => 'strength_2', '3' => 'strength_3', '4' => 'strength_4', '5' => 'strength_5')
+		),
+		'ssh_authentication' => array(
+			'datatype' => 'VARCHAR',
+			'formtype' => 'SELECT',
+			'default' => '',
+			'value'  => array('' => 'ssh_authentication_password_key', 'password' => 'ssh_authentication_password', 'key' => 'ssh_authentication_key')
 		)
 		//#################################
 		// END Datatable fields
