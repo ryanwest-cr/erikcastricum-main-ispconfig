@@ -143,9 +143,19 @@ class page_action extends tform_actions {
 			
 			if($app->tform->errorMessage == '') {
 				$server_config_array[$section] = $app->tform->encode($this->dataRecord, $section);
-				$server_config_str = $app->ini_parser->get_ini_string($server_config_array);
+				if ((! is_array($server_config_array[$section])) || count($server_config_array[$section]) == 0 ) {
+					$errMsg = sprintf( $app->tform->lng("server_config_error_section_not_updated"), $section );
+					$app->tpl->setVar('error', $errMsg);
+				} else {
+					$server_config_str = $app->ini_parser->get_ini_string($server_config_array);
 
-				$app->db->datalogUpdate('server', array("config" => $server_config_str), 'server_id', $server_id);
+					if (count($server_config_array) == 0 || $server_config_str == '') {
+						$app->tpl->setVar('error', $app->tform->lng("server_config_error_not_updated"));
+					} else {
+						$app->db->datalogUpdate('server', array("config" => $server_config_str), 'server_id', $server_id);
+						$app->tpl->setVar('error', '');
+					}
+				}
 			} else {
 				$app->error('Security breach!');
 			}
@@ -182,10 +192,11 @@ class page_action extends tform_actions {
 							$app->db->datalogUpdate('mail_user', $mail_user, 'mailuser_id', $mail_user["mailuser_id"], true);
 							$mail_user['autoresponder'] = 'y';
 							$app->db->datalogUpdate('mail_user', $mail_user, 'mailuser_id', $mail_user["mailuser_id"], true);
-						} elseif($mail_user['move_junk'] == 'y') {
+						} elseif($mail_user['move_junk'] != 'n') {
+							$save = $mail_user['move_junk'];
 							$mail_user['move_junk'] = 'n';
 							$app->db->datalogUpdate('mail_user', $mail_user, 'mailuser_id', $mail_user["mailuser_id"], true);
-							$mail_user['move_junk'] = 'y';
+							$mail_user['move_junk'] = $save;
 							$app->db->datalogUpdate('mail_user', $mail_user, 'mailuser_id', $mail_user["mailuser_id"], true);
 						} else {
 							$app->db->datalogUpdate('mail_user', $mail_user, 'mailuser_id', $mail_user["mailuser_id"], true);

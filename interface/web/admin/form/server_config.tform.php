@@ -33,7 +33,7 @@
 
  */
 
-$form["title"] = "Server Config";
+$form["title"] = "server_config";
 $form["description"] = "";
 $form["name"] = "server_config";
 $form["action"] = "server_config_edit.php";
@@ -131,7 +131,7 @@ $form["tabs"]['server'] = array(
 			'validators' => array(	0 => array('type' => 'NOTEMPTY',
 												'errmsg' => 'hostname_error_empty'),
 									1 => array ('type' => 'REGEX',
-												'regex' => '/^[\w\.\-]{2,255}\.[a-zA-Z0-9\-]{2,30}$/',
+												'regex' => '/^[\w\.\-]{2,255}\.[a-zA-Z0-9\-]{2,63}$/',
 												'errmsg'=> 'hostname_error_regex'),
 			),
 			'value' => '',
@@ -1316,15 +1316,6 @@ $form["tabs"]['web'] = array(
 			'value' => '',
 			'width' => '40',
 			'maxlength' => '255'
-		),
-		'enable_spdy' => array (
-			'datatype' => 'VARCHAR',
-			'formtype' => 'CHECKBOX',
-			'default'  => 'y',
-			'value' => array (
-				0 => 'n',
-				1 => 'y'
-			)
 		),
 		'apps_vhost_enabled' => array (
 			'datatype' => 'VARCHAR',

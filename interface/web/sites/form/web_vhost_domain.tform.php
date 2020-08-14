@@ -254,10 +254,10 @@ $form["tabs"]['domain'] = array (
 			'value'  => array('no' => 'disabled_txt', 'fast-cgi' => 'Fast-CGI', 'cgi' => 'CGI', 'mod' => 'Mod-PHP', 'suphp' => 'SuPHP', 'php-fpm' => 'PHP-FPM', 'hhvm' => 'HHVM'),
 			'searchable' => 2
 		),
-		'fastcgi_php_version' => array (
-			'datatype' => 'VARCHAR',
+		'server_php_id' => array (
+			'datatype' => 'INTEGER',
 			'formtype' => 'SELECT',
-			'default' => '',
+			'default' => '0',
 			/*'datasource'	=> array ( 	'type'	=> 'SQL',
 										'querystring' => "SELECT ip_address,ip_address FROM server_ip WHERE ip_type = 'IPv4' AND {AUTHSQL} ORDER BY ip_address",
 										'keyfield'=> 'ip_address',
@@ -591,15 +591,6 @@ if($ssl_available) {
 				'default' => '',
 				'value'  => array('' => 'none_txt', 'save' => 'save_certificate_txt', 'create' => 'create_certificate_txt', 'del' => 'delete_certificate_txt')
 			),
-			'enable_spdy' => array (
-				'datatype' => 'VARCHAR',
-				'formtype' => 'CHECKBOX',
-				'default'  => 'n',
-				'value' => array (
-					0 => 'n',
-					1 => 'y'
-				)
-			),
 			//#################################
 			// END Datatable fields
 			//#################################
@@ -638,7 +629,7 @@ $form["tabs"]['stats'] = array (
 			'datatype' => 'VARCHAR',
 			'formtype' => 'SELECT',
 			'default' => 'awstats',
-			'value'  => array('webalizer' => 'Webalizer', 'awstats' => 'AWStats', '' => 'None')
+			'value'  => array('awstats' => 'AWStats', 'goaccess' => 'GoAccess', 'webalizer' => 'Webalizer','' => 'None')
 		),
 		//#################################
 		// END Datatable fields
@@ -861,7 +852,7 @@ if($_SESSION["s"]["user"]["typ"] == 'admin'
 			'pm' => array (
 				'datatype' => 'VARCHAR',
 				'formtype' => 'SELECT',
-				'default' => 'dynamic',
+				'default' => 'ondemand',
 				'value'  => array('static' => 'static', 'dynamic' => 'dynamic', 'ondemand' => 'ondemand (PHP Version >= 5.3.9)')
 			),
 			'pm_max_children' => array (

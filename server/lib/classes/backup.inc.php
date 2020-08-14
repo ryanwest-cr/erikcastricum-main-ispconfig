@@ -856,6 +856,10 @@ class backup
         if (is_null($endings_list))
             $endings_list = $default_endings_list;
 
+       if (!is_dir($directory)) {
+               return array();
+       }
+
         $dir_handle = dir($directory);
         $files = array();
         while (false !== ($entry = $dir_handle->read())) {
@@ -1143,7 +1147,7 @@ class backup
 
         $records = $app->db->queryAllRecords("SELECT * FROM web_database WHERE server_id = ? AND parent_domain_id = ?", $server_id, $domain_id);
         if (empty($records)){
-            $app->log('Skipping database backup for domain ' . $web_domain['domain_id'] . ', because no related databases found.', LOGLEVEL_ERROR);
+            $app->log('Skipping database backup for domain ' . $web_domain['domain_id'] . ', because no related databases found.', LOGLEVEL_DEBUG);
             return true;
         }
 
@@ -1446,4 +1450,3 @@ class backup
 }
 
 ?>
-

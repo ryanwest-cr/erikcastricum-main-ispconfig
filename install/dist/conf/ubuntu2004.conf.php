@@ -1,7 +1,7 @@
 <?php
 
 /*
-Copyright (c) 2017, Till Brehm, ISPConfig UG
+Copyright (c) 2020, Till Brehm, ISPConfig UG
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -28,7 +28,7 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-//***  Ubuntu 19.10 default settings
+//***  Ubuntu 18.04 default settings
 
 //* Main
 $conf['language'] = 'en';

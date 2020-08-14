@@ -1,4 +1,7 @@
 <?php
+$wb['server_config'] = 'Server Config';
+$wb['server_config_error_not_updated'] = 'Error in Server Config: not updated';
+$wb['server_config_error_section_not_updated'] = 'Error in Server Config: %s section not updated';
 $wb['ufw_enable_txt'] = 'Etkin';
 $wb['ufw_manage_builtins_txt'] = 'İç Kural Yönetimi';
 $wb['ufw_ipv6_txt'] = 'IPv6 Kullanılsın';
@@ -273,7 +276,6 @@ $wb['network_filesystem_txt'] = 'Ağ Dosya Sistemi';
 $wb['php_ini_check_minutes_txt'] = 'Her X dakikada php.ini dosyasındaki değişiklikler denetlensin';
 $wb['php_ini_check_minutes_error_empty'] = 'php.ini dosyasındaki değişikliklerin kaç dakikada bir denetleneceğini yazın.';
 $wb['php_ini_check_minutes_info_txt'] = '0 = denetim yapılmaz';
-$wb['enable_spdy_txt'] = 'SPDY/HTTP2 Kullanılsın';
 $wb['web_settings_txt'] = 'Web Sunucu';
 $wb['xmpp_server_txt'] = 'XMPP Sunucu';
 $wb['xmpp_use_ipv6_txt'] = 'IPv6 Kullanılsın';
