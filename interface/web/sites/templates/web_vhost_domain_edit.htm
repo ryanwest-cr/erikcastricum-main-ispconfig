@@ -1,15 +1,18 @@
 <tmpl_if name="config_error_msg">
-<div style="background: #ffdfdf; border: 1px solid #df7d7d; border-width: 1px 0; margin: 1.5em 0 1.5em 0; padding: 7px;">
-                <p style="font-face:bold">{tmpl_var name='configuration_error_txt'}</p>
-				<div>
-				<div style="float:left;width:150px;">{tmpl_var name='config_error_tstamp'} :&nbsp;</div><div style="padding-left:150px;">{tmpl_var name='config_error_msg'}</div>
-				</div>
-</div>
+<div class="alert alert-danger">
+    <p>
+      <tmpl_var name="configuration_error_txt">
+        <div>
+          <div style="float:left;width:150px;">{tmpl_var name='config_error_tstamp'} :&nbsp;</div>
+          <div style="padding-left:150px;">{tmpl_var name='config_error_msg'}</div>
+        </div>
+    </p>
+  </div>
 </tmpl_if>
 
 
         {tmpl_hook name="begin_form"}
-		<tmpl_if name="vhostdomain_type" value="domain">
+    <tmpl_if name="vhostdomain_type" value="domain">
             <tmpl_if name="is_admin">
                 <div class="form-group">
                     <tmpl_if name="edit_disabled">
@@ -84,6 +87,15 @@
                     <tmpl_else>
                         <div class="col-sm-9"><input type="text" name="domain" id="domain" value="{tmpl_var name='domain'}" class="form-control" /></div></tmpl_if>
             </div>
+            <tmpl_if name="web_aliasdomains_info">
+            <div class="form-group">
+                   <label for="web_aliasdomains" class="col-sm-3 control-label">{tmpl_var name='dependent_domains_txt'}</label>
+                   <div class="col-sm-9">
+                           <textarea name="web_aliasdomains" id="web_aliasdomains" class="form-control" disabled="disabled"><tmpl_loop name="web_aliasdomains_info">{tmpl_var name='domain'}
+</tmpl_loop></textarea>
+                   </div>
+            </div>
+            </tmpl_if>
 			<tmpl_if name="edit_disabled">
 				<div class="form-group">
 					<label for="document_root" class="col-sm-3 control-label" readonly >{tmpl_var name='document_root_txt'}</label>

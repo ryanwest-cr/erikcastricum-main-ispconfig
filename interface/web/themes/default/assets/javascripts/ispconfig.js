@@ -86,7 +86,6 @@ var ISPConfig = {
 		if(ISPConfig.options.useComboBox == true) {
 			$('#sidebar').find("select:not(.chosen-select)").select2({
 				placeholder: '',
-				width: 'element',
 				selectOnBlur: true,
 				allowClear: true
 			});
@@ -100,7 +99,6 @@ var ISPConfig = {
 		if(ISPConfig.options.useComboBox == true) {
 			$('#pageContent').find("select:not(.chosen-select)").select2({
 				placeholder: '',
-				width: 'element',
 				selectOnBlur: true,
 				allowClear: true,
 				formatResult: function(o, cont, qry, escapeMarkup) {
@@ -178,7 +176,7 @@ var ISPConfig = {
 						ISPConfig.onAfterContentLoad(target, $('#'+formname).serialize());
 						ISPConfig.pageFormChanged = false;
 					}
-					clearTimeout(dataLogTimer);
+					clearTimeout(ISPConfig.dataLogTimer);
 					ISPConfig.dataLogNotification();
 					ISPConfig.hideLoadIndicator();
 				},
@@ -287,7 +285,7 @@ var ISPConfig = {
 					ISPConfig.onAfterContentLoad(pagename, (params ? params : null));
 					ISPConfig.pageFormChanged = false;
 				}
-				clearTimeout(dataLogTimer); // clear running dataLogTimer
+				clearTimeout(ISPConfig.dataLogTimer); // clear running dataLogTimer
 				ISPConfig.dataLogNotification();
 				ISPConfig.hideLoadIndicator();
 			},
@@ -516,12 +514,12 @@ var ISPConfig = {
 					$('.modal-body').html(dataLogItems.join(""));
 					$('.notification_text').text(data['count']);
 					$('.notification').css('display','');
-					dataLogTimer = setTimeout( function() { ISPConfig.dataLogNotification(); }, 2000 );
+					ISPConfig.dataLogTimer = setTimeout( function() { ISPConfig.dataLogNotification(); }, 2000 );
 				} else {
 					$('.notification').css('display','none');
 					$('.modal-body').html('');
 					$('#datalogModal').modal('hide');
-					dataLogTimer = setTimeout( function() { ISPConfig.dataLogNotification(); }, 5000 );
+					ISPConfig.dataLogTimer = setTimeout( function() { ISPConfig.dataLogNotification(); }, 5000 );
 				}
 			},
 			error: function() {

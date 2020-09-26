@@ -184,9 +184,10 @@ class tools_monitor {
 
 			foreach($data as $key => $value) {
 				if ($key != '') {
+					$memory = $app->functions->formatBytes($value);
 					$html .= '<tr>
                         <td>' . $key . ':</td>
-                        <td>' . $value . '</td>
+                        <td>' . $memory . '</td>
                         </tr>';
 				}
 			}
@@ -489,7 +490,7 @@ class tools_monitor {
 			if ($data == '') {
 				$html .= '<p>'.
 					'fail2ban is not installed on this server.<br />' .
-					'See more (for debian) <a href="http://www.howtoforge.com/fail2ban_debian_etch" target="htf">here...</a>'.
+					'See more (for debian) <a href="https://www.howtoforge.com/fail2ban_debian_etch" target="htf">here...</a>'.
 					'</p>';
 			}
 			else {

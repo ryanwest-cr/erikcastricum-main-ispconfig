@@ -945,6 +945,10 @@ class page_action extends tform_actions {
 	function onShowEdit() {
 		global $app;
 		if($app->tform->checkPerm($this->id, 'riud')) $app->tform->formDef['tabs']['domain']['readonly'] = false;
+		$sql = "SELECT domain_id, domain, type FROM web_domain WHERE (type='alias' OR type='subdomain') AND parent_domain_id = ?";
+		$subs = $app->db->queryAllRecords($sql, $this->id);
+		$app->tpl->setLoop('web_aliasdomains_info', $subs);
+
 		parent::onShowEdit();
 	}
 
@@ -1382,11 +1386,11 @@ class page_action extends tform_actions {
 		// make sure that the record belongs to the client group and not the admin group when admin inserts it
 		// also make sure that the user can not delete domain created by a admin if client protection is enabled
 		if($_SESSION["s"]["user"]["typ"] == 'admin' && isset($this->dataRecord["client_group_id"])) {
-  	  $client_group_id = $app->functions->intval($this->dataRecord["client_group_id"]);
-	  	$app->uses('getconf');
-	  	$global_config = $app->getconf->get_global_config('sites');
-	  	if($global_config['client_protection'] == 'y') {
-		    $app->db->query("UPDATE web_domain SET sys_groupid = ?, sys_perm_group = 'ru' WHERE domain_id = ?", $client_group_id, $this->id);
+			$client_group_id = $app->functions->intval($this->dataRecord["client_group_id"]);
+			$app->uses('getconf');
+			$global_config = $app->getconf->get_global_config('sites');
+			if($global_config['client_protection'] == 'y') {
+				$app->db->query("UPDATE web_domain SET sys_groupid = ?, sys_perm_group = 'ru' WHERE domain_id = ?", $client_group_id, $this->id);
 			} else {
 				$sysuser = $app->db->queryOneRecord('SELECT userid FROM sys_user WHERE default_group = ?',$client_group_id);
 				$sysuser_id = (is_array($sysuser) && isset($sysuser['userid']) && $sysuser['userid'] > 0)?$sysuser['userid']:1;
@@ -1490,7 +1494,7 @@ class page_action extends tform_actions {
 					$rec = $app->db->queryOneRecord("SELECT server_id from web_domain WHERE domain_id = ?", $this->id);
 					if($rec['server_id'] != $this->dataRecord["server_id"]) {
 						//* Add a error message and switch back to old server
-						$app->tform->errorMessage .= $app->lng('error_server_change_not_possible');
+						$app->tform->errorMessage .= $app->tform->lng('error_server_change_not_possible');
 						$this->dataRecord["server_id"] = $rec['server_id'];
 					}
 					unset($rec);
@@ -1501,17 +1505,17 @@ class page_action extends tform_actions {
 				$rec = $app->db->queryOneRecord("SELECT sys_perm_group, domain, ip_address, ipv6_address from web_domain WHERE domain_id = ?", $this->id);
 				if(isset($this->dataRecord["domain"]) && $rec['domain'] != $this->dataRecord["domain"] && !$app->tform->checkPerm($this->id, 'u')) {
 					//* Add a error message and switch back to old server
-					$app->tform->errorMessage .= $app->lng('error_domain_change_forbidden');
+					$app->tform->errorMessage .= $app->tform->lng('error_domain_change_forbidden');
 					$this->dataRecord["domain"] = $rec['domain'];
 				}
 				if(isset($this->dataRecord["ip_address"]) && $rec['ip_address'] != $this->dataRecord["ip_address"] && $rec['sys_perm_group'] != 'riud') {
 					//* Add a error message and switch back to old server
-					$app->tform->errorMessage .= $app->lng('error_ipv4_change_forbidden');
+					$app->tform->errorMessage .= $app->tform->lng('error_ipv4_change_forbidden');
 					$this->dataRecord["ip_address"] = $rec['ip_address'];
 				}
 				if(isset($this->dataRecord["ipv6_address"]) && $rec['ipv6_address'] != $this->dataRecord["ipv6_address"] && $rec['sys_perm_group'] != 'riud') {
 					//* Add a error message and switch back to old server
-					$app->tform->errorMessage .= $app->lng('error_ipv6_change_forbidden');
+					$app->tform->errorMessage .= $app->tform->lng('error_ipv6_change_forbidden');
 					$this->dataRecord["ipv6_address"] = $rec['ipv6_address'];
 				}
 				unset($rec);

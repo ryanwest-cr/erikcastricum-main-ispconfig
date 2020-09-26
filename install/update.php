@@ -30,30 +30,30 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /*
 	ISPConfig 3 updater.
-	
+
 	-------------------------------------------------------------------------------------
 	- Interactive update
 	-------------------------------------------------------------------------------------
 	run:
-	
+
 	php update.php
-	
+
 	-------------------------------------------------------------------------------------
 	- Noninteractive (autoupdate) mode
 	-------------------------------------------------------------------------------------
-	
+
 	The autoupdate mode can read the updater questions from a .ini style file or from
-	a php config file. Examples for both file types are in the docs folder. 
+	a php config file. Examples for both file types are in the docs folder.
 	See autoinstall.ini.sample and autoinstall.conf_sample.php.
-	
+
 	run:
-	
+
 	php update.php --autoinstall=autoinstall.ini
-	
+
 	or
-	
+
 	php update.php --autoinstall=autoinstall.conf.php
-	
+
 */
 
 error_reporting(E_ALL|E_STRICT);
@@ -188,6 +188,8 @@ $inst = new installer();
 if (!$inst->get_php_version()) die('ISPConfig requieres PHP '.$inst->min_php."\n");
 $inst->is_update = true;
 
+$inst->check_prerequisites();
+
 echo "This application will update ISPConfig 3 on your server.\n\n";
 
 //* Make a backup before we start the update
@@ -261,7 +263,7 @@ if($conf['mysql']['master_slave_setup'] == 'y') {
 	do {
 		$tmp_mysql_server_host = $inst->free_query('MySQL master server hostname', $conf['mysql']['master_host'],'mysql_master_hostname');
 		$tmp_mysql_server_port = $inst->free_query('MySQL master server port', $conf['mysql']['master_port'],'mysql_master_port');
-		$tmp_mysql_server_admin_user = $inst->free_query('MySQL master server root username', $conf['mysql']['master_admin_user'],'mysql_master_root_user');	 
+		$tmp_mysql_server_admin_user = $inst->free_query('MySQL master server root username', $conf['mysql']['master_admin_user'],'mysql_master_root_user');
 		$tmp_mysql_server_admin_password = $inst->free_query('MySQL master server root password', $conf['mysql']['master_admin_password'],'mysql_master_root_password');
 		$tmp_mysql_server_database = $inst->free_query('MySQL master server database name', $conf['mysql']['master_database'],'mysql_master_database');
 
@@ -472,7 +474,7 @@ if($reconfigure_services_answer == 'yes' || $reconfigure_services_answer == 'sel
 				$inst->configure_apps_vhost();
 			} else swriteln('Skipping config of Apps vhost');
 		}
-	
+
 		//* Configure Jailkit
 		if($inst->reconfigure_app('Jailkit', $reconfigure_services_answer)) {
 			swriteln('Configuring Jailkit');
@@ -517,6 +519,15 @@ if($reconfigure_services_answer == 'yes' || $reconfigure_services_answer == 'sel
 //** Configure ISPConfig
 swriteln('Updating ISPConfig');
 
+$issue_tried = false;
+// create acme vhost
+if($conf['nginx']['installed'] == true) {
+	$inst->make_acme_vhost('nginx'); // we need this config file but we don't want nginx to be restarted at this point
+}
+if($conf['apache']['installed'] == true) {
+	$inst->make_acme_vhost('apache'); // we need this config file but we don't want apache to be restarted at this point
+}
+
 if ($inst->install_ispconfig_interface) {
 	//** Customise the port ISPConfig runs on
 	$ispconfig_port_number = get_ispconfig_port_number();
@@ -531,7 +542,17 @@ if ($inst->install_ispconfig_interface) {
 	// $ispconfig_ssl_default = (is_ispconfig_ssl_enabled() == true)?'y':'n';
 	if(strtolower($inst->simple_query('Create new ISPConfig SSL certificate', array('yes', 'no'), 'no','create_new_ispconfig_ssl_cert')) == 'yes') {
 		$inst->make_ispconfig_ssl_cert();
+		$issue_tried = true;
 	}
+}
+
+// Create SSL certs for non-webserver(s)?
+if(!file_exists('/usr/local/ispconfig/interface/ssl/ispserver.crt')) {
+    if(!$issue_tried && strtolower($inst->simple_query('Do you want to create SSL certs for your server?', array('y', 'n'), 'y','create_ssl_server_certs')) == 'y') {
+        $inst->make_ispconfig_ssl_cert();
+	}
+} else {
+	swriteln('Certificate exists. Not creating a new one.');
 }
 
 $inst->install_ispconfig();

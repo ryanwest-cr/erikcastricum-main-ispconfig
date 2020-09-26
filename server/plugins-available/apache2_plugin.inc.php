@@ -37,6 +37,8 @@ class apache2_plugin {
 	var $action = '';
 	var $ssl_certificate_changed = false;
 	var $update_letsencrypt = false;
+	var $website = null;
+	var $jailkit_config = null;
 
 	//* This function is called during ispconfig installation to determine
 	//  if a symlink shall be created for this plugin.
@@ -714,7 +716,7 @@ class apache2_plugin {
 				}
 
 				//* Unmount the old log directory bfore we move the log dir
-				$app->system->exec_safe('umount ?', $data['old']['document_root'].'/log');
+				$app->system->exec_safe('umount -l ?', $data['old']['document_root'].'/log');
 
 				//* Create new base directory, if it does not exist yet
 				if(!is_dir($new_dir)) $app->system->mkdirpath($new_dir);
@@ -779,7 +781,7 @@ class apache2_plugin {
 		if($data['new']['stats_type'] != '' && !is_dir($data['new']['document_root'].'/' . $web_folder . '/stats')) $app->system->mkdirpath($data['new']['document_root'].'/' . $web_folder . '/stats');
 		if(!is_dir($data['new']['document_root'].'/ssl')) $app->system->mkdirpath($data['new']['document_root'].'/ssl');
 		if(!is_dir($data['new']['document_root'].'/cgi-bin')) $app->system->mkdirpath($data['new']['document_root'].'/cgi-bin');
-		if(!is_dir($data['new']['document_root'].'/tmp')) $app->system->mkdirpath($data['new']['document_root'].'/tmp');
+		if(!is_dir($data['new']['document_root'].'/tmp')) $app->system->mkdirpath($data['new']['document_root'].'/tmp', 0770);
 		if(!is_dir($data['new']['document_root'].'/webdav')) $app->system->mkdirpath($data['new']['document_root'].'/webdav');
 
 		if(!is_dir($data['new']['document_root'].'/.ssh')) {
@@ -797,6 +799,77 @@ class apache2_plugin {
 			$app->system->chgrp($data['new']['document_root'].'/private', $groupname);
 		}
 
+		// load jailkit server config
+		$jailkit_config = $app->getconf->get_server_config($conf['server_id'], 'jailkit');
+
+		// website overrides
+		if (isset($data['new']['jailkit_chroot_app_sections']) && $data['new']['jailkit_chroot_app_sections'] != '' ) {
+			$jailkit_config['jailkit_chroot_app_sections'] = $data['new']['jailkit_chroot_app_sections'];
+		}
+		if (isset($data['new']['jailkit_chroot_app_programs']) && $data['new']['jailkit_chroot_app_programs'] != '' ) {
+			$jailkit_config['jailkit_chroot_app_programs'] = $data['new']['jailkit_chroot_app_programs'];
+		}
+
+		$last_updated = preg_split('/[\s,]+/', $jailkit_config['jailkit_chroot_app_sections']
+						  .' '.$jailkit_config['jailkit_chroot_app_programs']
+						  .' '.$jailkit_config['jailkit_chroot_cron_programs']);
+		$last_updated = array_unique($last_updated, SORT_REGULAR);
+		sort($last_updated, SORT_STRING);
+		$update_hash = hash('md5', implode(' ', $last_updated));
+
+		// Create jailkit chroot when enabling php_fpm_chroot
+		if($data['new']['php_fpm_chroot'] == 'y' && $data['old']['php_fpm_chroot'] != 'y') {
+			$website = $app->db->queryOneRecord('SELECT * FROM web_domain WHERE domain_id = ?', $data['new']['domain_id']);
+			$this->website = array_merge($website, $data['new'], array('new_jailkit_hash' => $update_hash));
+			$this->jailkit_config = $jailkit_config;
+			$this->_setup_jailkit_chroot();
+			$this->_add_jailkit_user();
+			$check_for_jailkit_updates=false;
+		// else delete if unused
+		} elseif ($data['new']['delete_unused_jailkit'] == 'y' && $data['new']['php_fpm_chroot'] != 'y') {
+			$check_for_jailkit_updates=false;
+			$this->_delete_jailkit_if_unused($data['new']['domain_id']);
+			if(is_dir($data['new']['document_root'].'/etc/jailkit')) {
+				$check_for_jailkit_updates=true;
+			}
+		// else update if needed
+		} elseif ($data['new']['delete_unused_jailkit'] != 'y') {
+			$check_for_jailkit_updates=true;
+		}
+
+		// If jail exists (and wasn't deleted), we may need to update it
+		if($check_for_jailkit_updates &&
+		   ( ($data['old']['jailkit_chroot_app_sections'] != $data['new']['jailkit_chroot_app_sections']) ||
+		     ($data['old']['jailkit_chroot_app_programs'] != $data['new']['jailkit_chroot_app_programs']) ) )
+		{
+
+			if (isset($jailkit_config['jailkit_hardlinks'])) {
+				if ($jailkit_config['jailkit_hardlinks'] == 'yes') {
+					$options = array('hardlink');
+				} elseif ($jailkit_config['jailkit_hardlinks'] == 'no') {
+					$options = array();
+				}
+			} else {
+				$options = array('allow_hardlink');
+			}
+
+			$options[] = 'force';
+
+			$sections = $jailkit_config['jailkit_chroot_app_sections'];
+			$programs = $jailkit_config['jailkit_chroot_app_programs'] . ' '
+				  . $jailkit_config['jailkit_chroot_cron_programs'];
+
+			// don't update if last_jailkit_hash is the same
+			$tmp = $app->db->queryOneRecord('SELECT `last_jailkit_hash` FROM web_domain WHERE domain_id = ?', $data['new']['parent_domain_id']);
+			if ($update_hash != $tmp['last_jailkit_hash']) {
+				$app->system->update_jailkit_chroot($data['new']['document_root'], $sections, $programs, $options);
+
+				// this gets last_jailkit_update out of sync with master db, but that is ok,
+				// as it is only used as a timestamp to moderate the frequency of updating on the slaves
+				$app->db->query("UPDATE `web_domain` SET `last_jailkit_update` = NOW(), `last_jailkit_hash` = ? WHERE `document_root` = ?", $update_hash, $data['new']['document_root']);
+			}
+			unset($tmp);
+		}
 
 		// Remove the symlink for the site, if site is renamed
 		if($this->action == 'update' && $data['old']['domain'] != '' && $data['new']['domain'] != $data['old']['domain']) {
@@ -808,7 +881,7 @@ class apache2_plugin {
 			$app->system->removeLine('/etc/fstab', $fstab_line);
 
 			//* Unmount log directory
-			$app->system->exec_safe('umount ?', $data['old']['document_root'].'/'.$old_log_folder);
+			$app->system->exec_safe('umount -l ?', $data['old']['document_root'].'/'.$old_log_folder);
 		}
 
 		//* Create the log dir if nescessary and mount it
@@ -1176,6 +1249,7 @@ class apache2_plugin {
 		//* Create custom php.ini
 		if(trim($data['new']['custom_php_ini']) != '') {
 			$has_custom_php_ini = true;
+			$custom_sendmail_path = false;
 			if(!is_dir($custom_php_ini_dir)) $app->system->mkdirpath($custom_php_ini_dir);
 
 			$php_ini_content = $this->get_master_php_ini_content($data['new']);
@@ -1198,6 +1272,13 @@ class apache2_plugin {
 						}
 					}
 				}
+			}
+
+			$custom_sendmail_path = false;
+			$line = strtok($php_ini_content, '\n');
+			while ($line !== false) {
+				if (strpos($line, 'sendmail_path') === 0) $custom_sendmail_path = true;
+				$line = strtok('\n');
 			}
 
 			$app->system->file_put_contents($custom_php_ini_dir.'/php.ini', $php_ini_content);
@@ -1243,7 +1324,8 @@ class apache2_plugin {
 		$vhost_data['apache_directives'] = str_replace("\r", "\n", $vhost_data['apache_directives']);
 		$trans = array(
 			'{DOCROOT}' => $vhost_data['web_document_root_www'],
-			'{DOCROOT_CLIENT}' => $vhost_data['web_document_root']
+			'{DOCROOT_CLIENT}' => $vhost_data['web_document_root'],
+			'{DOMAIN}' => $vhost_data['domain']
 		);
 		$vhost_data['apache_directives'] = strtr($vhost_data['apache_directives'], $trans);
 
@@ -1308,6 +1390,8 @@ class apache2_plugin {
 			$vhost_data['seo_redirect_enabled'] = 0;
 		}
 
+		$vhost_data['custom_sendmail_path'] = (isset($custom_sendmail_path) && $custom_sendmail_path) ? 'y' : 'n';
+
 		$tpl->setVar($vhost_data);
 		$tpl->setVar('apache_version', $app->system->getapacheversion());
 
@@ -1331,13 +1415,13 @@ class apache2_plugin {
 
 			switch($data['new']['subdomain']) {
 			case 'www':
-				$rewrite_rules[] = array( 'rewrite_domain'  => '^'.$this->_rewrite_quote($data['new']['domain']),
+				$rewrite_rules[] = array('rewrite_domain'  => '^'.$this->_rewrite_quote($data['new']['domain']),
 					'rewrite_type'   => ($data['new']['redirect_type'] == 'no')?'':'['.$data['new']['redirect_type'].']',
 					'rewrite_target'  => $rewrite_target,
 					'rewrite_target_ssl' => $rewrite_target_ssl,
 					'rewrite_is_url'    => ($this->_is_url($rewrite_target) ? 'y' : 'n'),
 					'rewrite_add_path' => (substr($rewrite_target, -1) == '/' ? 'y' : 'n'));
-				$rewrite_rules[] = array( 'rewrite_domain'  => '^' . $this->_rewrite_quote('www.'.$data['new']['domain']),
+				$rewrite_rules[] = array('rewrite_domain'  => '^' . $this->_rewrite_quote('www.'.$data['new']['domain']),
 					'rewrite_type'   => ($data['new']['redirect_type'] == 'no')?'':'['.$data['new']['redirect_type'].']',
 					'rewrite_target'  => $rewrite_target,
 					'rewrite_target_ssl' => $rewrite_target_ssl,
@@ -1488,6 +1572,10 @@ class apache2_plugin {
 			$tpl->setVar('rewrite_enabled', 1);
 		} else {
 			$tpl->setVar('rewrite_enabled', 0);
+		}
+
+		if($data['new']['ssl'] == 'n') {
+			$tpl->setVar('rewrite_to_https', 'n');
 		}
 
 		//$tpl->setLoop('redirects',$rewrite_rules);
@@ -1893,7 +1981,7 @@ class apache2_plugin {
 
 		if($data['new']['stats_type'] != '') {
 			if(!is_dir($data['new']['document_root'].'/' . $web_folder . '/stats')) $app->system->mkdir($data['new']['document_root'].'/' . $web_folder . '/stats');
-			$ht_file = "AuthType Basic\nAuthName \"Members Only\"\nAuthUserFile ".$data['new']['document_root']."/web/stats/.htpasswd_stats\nrequire valid-user\nDirectoryIndex index.html index.php\nHeader unset Content-Security-Policy";
+			$ht_file = "AuthType Basic\nAuthName \"Members Only\"\nAuthUserFile ".$data['new']['document_root']."/web/stats/.htpasswd_stats\nrequire valid-user\nDirectoryIndex index.html index.php\nHeader unset Content-Security-Policy\n<Files \"goaindex.html\">\nAddDefaultCharset UTF-8\n</Files>\n";
 			$app->system->file_put_contents($data['new']['document_root'].'/' . $web_folder . '/stats/.htaccess', $ht_file);
 			$app->system->chmod($data['new']['document_root'].'/' . $web_folder . '/stats/.htaccess', 0755);
 			unset($ht_file);
@@ -1924,6 +2012,21 @@ class apache2_plugin {
 		if($data['new']['stats_type'] == '' && ($data['new']['type'] == 'vhost' || $data['new']['type'] == 'vhostsubdomain' || $data['new']['type'] == 'vhostalias')) {
 			$app->file->removeDirectory($data['new']['document_root'].'/web/stats');
 		}
+
+		//* Remove the AWstats configuration file
+		if($data['old']['stats_type'] == 'awstats' && $data['new']['stats_type'] != 'awstats') {
+			$this->awstats_delete($data, $web_config);
+		}
+
+		//* Remove the GoAccess configuration file
+		if($data['old']['stats_type'] == 'goaccess' && $data['new']['stats_type'] != 'goaccess') {
+			$this->goaccess_delete($data, $web_config);
+		}
+
+                //* Remove the Webalizer configuration file
+		if($data['old']['stats_type'] == 'webalizer' && $data['new']['stats_type'] != 'webalizer') {
+			$this->webalizer_delete($data, $web_config);
+                }
 
 		$this->php_fpm_pool_update($data, $web_config, $pool_dir, $pool_name, $socket_dir, $web_folder);
 		$this->hhvm_update($data, $web_config);
@@ -2122,10 +2225,10 @@ class apache2_plugin {
 		if($data['old']['type'] == 'vhost' || $data['old']['type'] == 'vhostsubdomain' || $data['old']['type'] == 'vhostalias'){
 			if(is_array($log_folders) && !empty($log_folders)){
 				foreach($log_folders as $log_folder){
-					$app->system->exec_safe('umount ? 2>/dev/null', $data['old']['document_root'].'/'.$log_folder);
+					$app->system->exec_safe('umount -l ? 2>/dev/null', $data['old']['document_root'].'/'.$log_folder);
 				}
 			} else {
-				$app->system->exec_safe('umount ? 2>/dev/null', $data['old']['document_root'].'/'.$log_folder);
+				$app->system->exec_safe('umount -l ? 2>/dev/null', $data['old']['document_root'].'/'.$log_folder);
 			}
 
 			// remove letsencrypt if it exists (renew will always fail otherwise)
@@ -2328,14 +2431,9 @@ class apache2_plugin {
 
 			}
 
-			//* Remove the awstats configuration file
+			//* Remove the AWstats configuration file
 			if($data['old']['stats_type'] == 'awstats') {
 				$this->awstats_delete($data, $web_config);
-			}
-
-			//* Remove the GoAccess configuration file
-			if($data['old']['stats_type'] == 'goaccess') {
-				$this->goaccess_delete($data, $web_config);
 			}
 
 			if($data['old']['type'] == 'vhostsubdomain' || $data['old']['type'] == 'vhostalias') {
@@ -3069,12 +3167,12 @@ class apache2_plugin {
                         }
                 }
 
-                if(!is_dir($data['new']['document_root']."/" . $web_folder . "/stats/.db")) $app->system->mkdirpath($data['new']['document_root'] . "/" . $web_folder . "/stats/.db");
-                $goaccess_conf = $data['new']['document_root'].'/log/goaccess.conf';
+                if(!is_dir($data['new']['document_root'] . "/log/goaccess_db")) $app->system->mkdirpath($data['new']['document_root'] . "/log/goaccess_db");
+		$goaccess_conf = $data['new']['document_root'].'/log/goaccess.conf';
 
                 /*
                 In case that you use a different log format, you should use a custom goaccess.conf which you'll have to put into /usr/local/ispconfig/server/conf-custom/.
-                By default the originaly with GoAccess shipped goaccess.conf from /etc/ will be used along with the log-format value COMBINED. 
+                By default the originaly with GoAccess shipped goaccess.conf from /etc/ will be used along with the log-format value COMBINED.
 		*/
 
                 if(file_exists("/usr/local/ispconfig/server/conf-custom/goaccess.conf.master")) {
@@ -3106,7 +3204,7 @@ class apache2_plugin {
 
                 if(is_file($goaccess_conf) && (filesize($goaccess_conf) > 0)) {
                         $app->log('Created GoAccess config file: '.$goaccess_conf, LOGLEVEL_DEBUG);
-                } 
+                }
 
                 if(is_file($data['new']['document_root']."/" . $web_folder . "/stats/index.html")) $app->system->unlink($data['new']['document_root']."/" . $web_folder . "/stats/index.html");
                 if(file_exists("/usr/local/ispconfig/server/conf-custom/goaccess_index.php.master")) {
@@ -3127,6 +3225,18 @@ class apache2_plugin {
 			$app->log('Removed GoAccess config file: '.$goaccess_conf, LOGLEVEL_DEBUG);
 		}
 	}
+
+        //* Delete the Webalizer configuration file
+        private function webalizer_delete ($data, $web_config) {
+                global $app;
+
+                $webalizer_conf = $data['old']['document_root'] . "/log/webalizer.conf";
+
+                if ( @is_file($webalizer_conf) ) {
+                        $app->system->unlink($webalizer_conf);
+                        $app->log('Removed Webalizer config file: '.$webalizer_conf, LOGLEVEL_DEBUG);
+                }
+        }
 
 	private function hhvm_update($data, $web_config) {
 		global $app, $conf;
@@ -3339,6 +3449,7 @@ class apache2_plugin {
 		}
 
 		$custom_session_save_path = false;
+		$custom_sendmail_path = false;
 		if($custom_php_ini_settings != ''){
 			// Make sure we only have Unix linebreaks
 			$custom_php_ini_settings = str_replace("\r\n", "\n", $custom_php_ini_settings);
@@ -3356,6 +3467,7 @@ class apache2_plugin {
 					if($value != ''){
 						$key = trim($key);
 						if($key == 'session.save_path') $custom_session_save_path = true;
+						if($key == 'sendmail_path') $custom_sendmail_path = true;
 						switch (strtolower($value)) {
 						case '0':
 							// PHP-FPM might complain about invalid boolean value if you use 0
@@ -3378,6 +3490,7 @@ class apache2_plugin {
 		}
 
 		$tpl->setVar('custom_session_save_path', ($custom_session_save_path ? 'y' : 'n'));
+		$tpl->setVar('custom_sendmail_path', ($custom_sendmail_path ? 'y' : 'n'));
 
 		$tpl->setLoop('custom_php_ini_settings', $final_php_ini_settings);
 
@@ -3590,6 +3703,156 @@ class apache2_plugin {
 			$seo_redirects[$prefix.'seo_redirect_operator'] = '!';
 		}
 		return $seo_redirects;
+	}
+
+	function _setup_jailkit_chroot()
+	{
+		global $app;
+
+		$app->uses('system');
+
+		if (isset($this->jailkit_config) && isset($this->jailkit_config['jailkit_hardlinks'])) {
+			if ($this->jailkit_config['jailkit_hardlinks'] == 'yes') {
+				$options = array('hardlink');
+			} elseif ($this->jailkit_config['jailkit_hardlinks'] == 'no') {
+				$options = array();
+			}
+		} else {
+			$options = array('allow_hardlink');
+		}
+
+		// should move return here if $this->website['new_jailkit_hash'] == $this->website['last_jailkit_hash'] ?
+
+		// check if the chroot environment is created yet if not create it with a list of program sections from the config
+		if (!is_dir($this->website['document_root'].'/etc/jailkit'))
+		{
+			$app->system->create_jailkit_chroot($this->website['document_root'], $this->jailkit_config['jailkit_chroot_app_sections'], $options);
+			$app->log("Added jailkit chroot", LOGLEVEL_DEBUG);
+
+			$this->_add_jailkit_programs($options);
+
+			$app->load('tpl');
+
+			$tpl = new tpl();
+			$tpl->newTemplate("bash.bashrc.master");
+
+			$tpl->setVar('jailkit_chroot', true);
+			$tpl->setVar('domain', $this->website['domain']);
+			$tpl->setVar('home_dir', $this->_get_home_dir(""));
+
+			$bashrc = $this->website['document_root'].'/etc/bash.bashrc';
+			if(@is_file($bashrc) || @is_link($bashrc)) unlink($bashrc);
+
+			file_put_contents($bashrc, $tpl->grab());
+			unset($tpl);
+
+			$app->log("Added bashrc script: ".$bashrc, LOGLEVEL_DEBUG);
+
+			$tpl = new tpl();
+			$tpl->newTemplate("motd.master");
+
+			$tpl->setVar('domain', $this->website['domain']);
+
+			$motd = $this->website['document_root'].'/var/run/motd';
+			if(@is_file($motd) || @is_link($motd)) unlink($motd);
+
+			$app->system->file_put_contents($motd, $tpl->grab());
+
+		} else {
+			// force update existing jails
+			$options[] = 'force';
+
+			$sections = $this->jailkit_config['jailkit_chroot_app_sections'];
+			$programs = $this->jailkit_config['jailkit_chroot_app_programs'] . ' '
+				  . $this->jailkit_config['jailkit_chroot_cron_programs'];
+
+			if ($this->website['new_jailkit_hash'] == $this->website['last_jailkit_hash']) {
+				return;
+			}
+
+			$app->system->update_jailkit_chroot($this->website['document_root'], $sections, $programs, $options);
+		}
+
+		// this gets last_jailkit_update out of sync with master db, but that is ok,
+		// as it is only used as a timestamp to moderate the frequency of updating on the slaves
+		$app->db->query("UPDATE `web_domain` SET `last_jailkit_update` = NOW(), `last_jailkit_hash` = ? WHERE `document_root` = ?", $this->website['new_jailkit_hash'], $this->website['document_root']);
+	}
+
+	function _add_jailkit_programs($opts=array())
+	{
+		global $app;
+
+		$app->uses('system');
+
+		//copy over further programs and its libraries
+		$app->system->create_jailkit_programs($this->website['document_root'], $this->jailkit_config['jailkit_chroot_app_programs'], $opts);
+		$app->log("Added app programs to jailkit chroot", LOGLEVEL_DEBUG);
+
+		$app->system->create_jailkit_programs($this->website['document_root'], $this->jailkit_config['jailkit_chroot_cron_programs'], $opts);
+		$app->log("Added cron programs to jailkit chroot", LOGLEVEL_DEBUG);
+	}
+
+	function _get_home_dir($username)
+	{
+		return str_replace("[username]", $username, $this->jailkit_config['jailkit_chroot_home']);
+	}
+
+	function _add_jailkit_user()
+	{
+		global $app;
+
+		// add the user to the chroot
+		$jailkit_chroot_userhome = $this->_get_home_dir($this->website['system_user']);
+
+		if(!is_dir($this->website['document_root'].'/etc')) $app->system->mkdir($this->website['document_root'].'/etc', 0755, true);
+		if(!is_file($this->website['document_root'].'/etc/passwd')) $app->system->exec_safe('touch ?', $this->website['document_root'].'/etc/passwd');
+
+		// IMPORTANT!
+		// ALWAYS create the user. Even if the user was created before
+		// if we check if the user exists, then a update (no shell -> jailkit) will not work
+		// and the user has FULL ACCESS to the root of the server!
+		$app->system->create_jailkit_user($this->website['system_user'], $this->website['document_root'], $jailkit_chroot_userhome);
+
+		if(!is_dir($this->website['document_root'].$jailkit_chroot_userhome)) {
+			$app->system->mkdir($this->website['document_root'].$jailkit_chroot_userhome, 0750, true);
+			$app->system->chown($this->website['document_root'].$jailkit_chroot_userhome, $this->website['system_user']);
+			$app->system->chgrp($this->website['document_root'].$jailkit_chroot_userhome, $this->website['system_group']);
+		}
+
+		$app->log("Added created jailkit user home in : ".$this->website['document_root'].$jailkit_chroot_userhome, LOGLEVEL_DEBUG);
+	}
+
+	private function _delete_jailkit_if_unused($parent_domain_id) {
+		global $app, $conf;
+
+		// get jail directory
+		$parent_domain = $app->db->queryOneRecord("SELECT * FROM `web_domain` WHERE `domain_id` = ? OR `parent_domain_id` = ? AND `document_root` IS NOT NULL", $parent_domain_id, $parent_domain_id);
+		if (!is_dir($parent_domain['document_root'])) {
+			return;
+		}
+
+		// chroot is used by php-fpm
+		if (isset($parent_domain['php_fpm_chroot']) && $parent_domain['php_fpm_chroot'] == 'y') {
+			return;
+		}
+
+		// check for any shell_user using this jail
+		$inuse = $app->db->queryOneRecord('SELECT shell_user_id FROM `shell_user` WHERE `parent_domain_id` = ? AND `chroot` = ?', $parent_domain_id, 'jailkit');
+		if($inuse) {
+			return;
+		}
+
+		// check for any cron job using this jail
+		$inuse = $app->db->queryOneRecord('SELECT id FROM `cron` WHERE `parent_domain_id` = ? AND `type` = ?', $parent_domain_id, 'chrooted');
+		if($inuse) {
+			return;
+		}
+
+		$app->system->delete_jailkit_chroot($parent_domain['document_root']);
+
+		// this gets last_jailkit_update out of sync with master db, but that is ok,
+		// as it is only used as a timestamp to moderate the frequency of updating on the slaves
+		$app->db->query("UPDATE `web_domain` SET `last_jailkit_update` = NOW(), `last_jailkit_hash` = NULL WHERE `document_root` = ?", $parent_domain['document_root']);
 	}
 
 } // end class

@@ -253,7 +253,7 @@ CREATE TABLE `client` (
   `canceled` enum('n','y') NOT NULL DEFAULT 'n',
   `can_use_api` enum('n','y') NOT NULL DEFAULT 'n',
   `tmp_data` mediumblob,
-  `id_rsa` text NOT NULL DEFAULT '',
+  `id_rsa` text,
   `ssh_rsa` varchar(600) NOT NULL DEFAULT '',
   `customer_no_template` varchar(255) DEFAULT 'R[CLIENTID]C[CUSTOMER_NO]',
   `customer_no_start` int(11) NOT NULL DEFAULT '1',
@@ -330,7 +330,7 @@ CREATE TABLE `client_template` (
   `limit_web_ip` text,
   `limit_web_domain` int(11) NOT NULL default '-1',
   `limit_web_quota` int(11) NOT NULL default '-1',
-  `web_php_options` varchar(255) NOT NULL DEFAULT 'no',
+  `web_php_options` varchar(255) NOT NULL DEFAULT '',
   `limit_cgi` enum('n','y') NOT NULL DEFAULT 'n',
   `limit_ssi` enum('n','y') NOT NULL DEFAULT 'n',
   `limit_perl` enum('n','y') NOT NULL DEFAULT 'n',
@@ -345,7 +345,7 @@ CREATE TABLE `client_template` (
   `limit_web_aliasdomain` int(11) NOT NULL default '-1',
   `limit_ftp_user` int(11) NOT NULL default '-1',
   `limit_shell_user` int(11) NOT NULL default '0',
-  `ssh_chroot` varchar(255) NOT NULL DEFAULT 'no',
+  `ssh_chroot` varchar(255) NOT NULL DEFAULT '',
   `limit_webdav_user` int(11) NOT NULL default '0',
   `limit_backup` ENUM( 'n', 'y' ) NOT NULL DEFAULT 'y',
   `limit_directive_snippets` ENUM( 'n', 'y' ) NOT NULL DEFAULT 'n',
@@ -1040,7 +1040,8 @@ CREATE TABLE `mail_user` (
   `maildir` varchar(255) NOT NULL default '',
   `maildir_format` varchar(255) NOT NULL default 'maildir',
   `quota` bigint(20) NOT NULL default '-1',
-  `cc` text NOT NULL default '',
+  `cc` text,
+  `forward_in_lda` enum('n','y') NOT NULL default 'n',
   `sender_cc` varchar(255) NOT NULL default '',
   `homedir` varchar(255) NOT NULL default '',
   `autoresponder` enum('n','y') NOT NULL default 'n',
@@ -2070,7 +2071,6 @@ CREATE TABLE `web_domain` (
   `backup_excludes` mediumtext,
   `active` enum('n','y') NOT NULL default 'y',
   `traffic_quota_lock` enum('n','y') NOT NULL default 'n',
-  `fastcgi_php_version` varchar(255) DEFAULT NULL,
   `proxy_directives` mediumtext,
   `last_quota_notification` date NULL default NULL,
   `rewrite_rules` mediumtext,
@@ -2084,6 +2084,11 @@ CREATE TABLE `web_domain` (
   `log_retention` int(11) NOT NULL DEFAULT '10',
   `proxy_protocol` enum('n','y') NOT NULL default 'n',
   `server_php_id` INT(11) UNSIGNED NOT NULL DEFAULT 0,
+  `jailkit_chroot_app_sections` mediumtext NULL DEFAULT NULL,
+  `jailkit_chroot_app_programs` mediumtext NULL DEFAULT NULL,
+  `delete_unused_jailkit` enum('n','y') NOT NULL default 'n',
+  `last_jailkit_update` date NULL DEFAULT NULL,
+  `last_jailkit_hash` varchar(255) DEFAULT NULL,
   PRIMARY KEY  (`domain_id`),
   UNIQUE KEY `serverdomain` (  `server_id` , `ip_address`,  `domain` )
 ) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
@@ -2582,7 +2587,7 @@ INSERT INTO `sys_user` (`userid`, `sys_userid`, `sys_groupid`, `sys_perm_user`, 
 -- Dumping data for table `sys_config`
 --
 
-INSERT INTO sys_config VALUES ('db','db_version','3.1dev');
+INSERT INTO sys_config VALUES ('db','db_version','3.2dev');
 INSERT INTO sys_config VALUES ('interface','session_timeout','0');
 
 SET FOREIGN_KEY_CHECKS = 1;
