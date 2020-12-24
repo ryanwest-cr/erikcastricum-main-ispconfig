@@ -91,13 +91,13 @@ class postfix_server_plugin {
 			if (!empty($mail_config['relayhost_user']) || !empty($mail_config['relayhost_password'])) {
 				$content .= "\n".$mail_config['relayhost'].'   '.$mail_config['relayhost_user'].':'.$mail_config['relayhost_password'];
 			}
-			
+
 			if (preg_replace('/^(#[^\n]*|\s+)(:?\n+|)/m','',$content) != '') {
 				exec("postconf -e 'smtp_sasl_auth_enable = yes'");
 			} else {
 				exec("postconf -e 'smtp_sasl_auth_enable = no'");
 			}
-			
+
 			$app->system->exec_safe("postconf -e ?", 'relayhost = '.$mail_config['relayhost']);
 			file_put_contents('/etc/postfix/sasl_passwd', $content);
 			chmod('/etc/postfix/sasl_passwd', 0600);
@@ -110,36 +110,40 @@ class postfix_server_plugin {
 		}
 
 		if($mail_config['realtime_blackhole_list'] != $old_ini_data['mail']['realtime_blackhole_list']) {
-			$rbl_updated = false;
-			$rbl_hosts = trim(preg_replace('/\s+/', '', $mail_config['realtime_blackhole_list']));
-			if($rbl_hosts != ''){
-				$rbl_hosts = explode(",", $rbl_hosts);
-			}
+			# reject_rbl_client is now in smtpd_client_restrictions, remove here:
 			$options = preg_split("/,\s*/", exec("postconf -h smtpd_recipient_restrictions"));
 			$new_options = array();
 			foreach ($options as $key => $value) {
 				$value = trim($value);
 				if ($value == '') continue;
-				if (!preg_match('/reject_rbl_client/', $value)) {
-					$new_options[] = $value;
-				} else {
-					if(is_array($rbl_hosts) && !empty($rbl_hosts) && !$rbl_updated){
-						$rbl_updated = true;
-						foreach ($rbl_hosts as $key2 => $value2) {
-							$value2 = trim($value2);
-							if($value2 != '') $new_options[] = "reject_rbl_client ".$value2;
-						}
-					}
-				}
-			}
-			//* first time add rbl-list
-			if (!$rbl_updated && is_array($rbl_hosts) && !empty($rbl_hosts)) {
-				foreach ($rbl_hosts as $key => $value) {
-					$value = trim($value);
-					if($value != '') $new_options[] = "reject_rbl_client ".$value;
-				}
+				if (preg_match('/^reject_rbl_client/', $value)) continue;
+				$new_options[] = $value;
 			}
 			$app->system->exec_safe("postconf -e ?", 'smtpd_recipient_restrictions = '.implode(", ", $new_options));
+
+			$rbl_options = array();
+			$rbl_hosts = trim(preg_replace('/\s+/', '', $mail_config['realtime_blackhole_list']));
+			if($rbl_hosts != ''){
+				$rbl_hosts = explode(",", $rbl_hosts);
+				foreach ($rbl_hosts as $key => $value) {
+					$value = trim($value);
+					if($value != '') $rbl_options[] = "reject_rbl_client ".$value;
+				}
+			}
+
+			$options = preg_split("/,\s*/", exec("postconf -h smtpd_client_restrictions"));
+			$new_options = array();
+			foreach ($options as $key => $value) {
+				$value = trim($value);
+				if ($value == '') continue;
+				if (preg_match('/^reject_rbl_client/', $value)) continue;
+				$new_options[] = $value;
+				if (preg_match('/^permit_mynetworks/', $value)) {
+					$new_options = array_merge($new_options, $rbl_options);
+					$rbl_options = array(); // so we don't ever array_merge twice
+				}
+			}
+			$app->system->exec_safe("postconf -e ?", 'smtpd_client_restrictions = '.implode(", ", $new_options));
 		}
 
 		if ($mail_config['reject_sender_login_mismatch'] != $old_ini_data['mail']['reject_sender_login_mismatch']) {
@@ -189,7 +193,7 @@ class postfix_server_plugin {
 					}
 				}
 				if ($i == count($new_options)) {
-					$new_options[] = array('reject_unknown_client_hostname');
+					$new_options[] = 'reject_unknown_client_hostname';
 				}
 
 				$app->system->exec_safe("postconf -e ?", 'smtpd_client_restrictions = '.implode(", ", $new_options));
@@ -227,7 +231,7 @@ class postfix_server_plugin {
 					}
 				}
 				if ($i == count($new_options)) {
-					$new_options[] = array('reject_unknown_helo_hostname');
+					$new_options[] = 'reject_unknown_helo_hostname';
 				}
 
 				$app->system->exec_safe("postconf -e ?", 'smtpd_helo_restrictions = '.implode(", ", $new_options));
@@ -281,14 +285,14 @@ class postfix_server_plugin {
 				exec("postconf -X 'smtpd_timeout'");
 			}
 		}
-		
+
 		if($app->system->is_installed('dovecot')) {
 			$virtual_transport = 'dovecot';
 			$configure_lmtp = false;
 			$dovecot_protocols = 'imap pop3';
 
 			//* dovecot-lmtpd
-			if( ($configure_lmtp = is_file('/usr/lib/dovecot/lmtp')) ||
+			if( ($configure_lmtp = (is_file('/usr/lib/dovecot/lmtp') || is_file('/usr/libexec/dovecot/lmtp'))) ||
 			    ($mail_config["mailbox_virtual_uidgid_maps"] == 'y') )
 			{
 				$virtual_transport = 'lmtp:unix:private/dovecot-lmtp';
@@ -296,7 +300,7 @@ class postfix_server_plugin {
 			}
 
 			//* dovecot-managesieved
-			if(is_file('/usr/lib/dovecot/managesieve')) {
+			if(is_file('/usr/lib/dovecot/managesieve') || is_file('/usr/libexec/dovecot/managesieve')) {
 				$dovecot_protocols .= ' sieve';
 			}
 
@@ -347,7 +351,7 @@ class postfix_server_plugin {
 			if($mail_config['content_filter'] == 'rspamd'){
 				exec("postconf -X 'receive_override_options'");
 				exec("postconf -X 'content_filter'");
-				
+
 				exec("postconf -e 'smtpd_milters = inet:localhost:11332'");
 				exec("postconf -e 'non_smtpd_milters = inet:localhost:11332'");
 				exec("postconf -e 'milter_protocol = 6'");
@@ -355,7 +359,7 @@ class postfix_server_plugin {
 				exec("postconf -e 'milter_default_action = accept'");
 
 				exec("postconf -e 'smtpd_sender_restrictions = ${raslm} permit_mynetworks, ${rslm} permit_sasl_authenticated, reject_non_fqdn_sender, check_sender_access proxy:mysql:/etc/postfix/mysql-virtual_sender.cf'");
-				
+
 				$new_options = array();
 				$options = preg_split("/,\s*/", exec("postconf -h smtpd_recipient_restrictions"));
 				foreach ($options as $key => $value) {
@@ -367,7 +371,7 @@ class postfix_server_plugin {
 					$new_options[] = $value;
 				}
 				exec("postconf -e 'smtpd_recipient_restrictions = ".implode(", ", $new_options)."'");
-				
+
 				// get all domains that have dkim enabled
 				if ( substr($mail_config['dkim_path'], strlen($mail_config['dkim_path'])-1) == '/' ) {
 					$mail_config['dkim_path'] = substr($mail_config['dkim_path'], 0, strlen($mail_config['dkim_path'])-1);
@@ -384,10 +388,11 @@ class postfix_server_plugin {
 				unset($dkim_domains);
 			} else {
 				exec("postconf -X 'smtpd_milters'");
+				exec("postconf -X 'non_smtpd_milters'");
 				exec("postconf -X 'milter_protocol'");
 				exec("postconf -X 'milter_mail_macros'");
 				exec("postconf -X 'milter_default_action'");
-				
+
 				exec("postconf -e 'receive_override_options = no_address_mappings'");
 				exec("postconf -e 'content_filter = " . ($configure_lmtp ? "lmtp" : "amavis" ) . ":[127.0.0.1]:10024'");
 
@@ -395,7 +400,7 @@ class postfix_server_plugin {
 				exec("postconf -e 'smtpd_sender_restrictions = ${raslm} check_sender_access regexp:/etc/postfix/tag_as_originating.re, permit_mynetworks, ${rslm} permit_sasl_authenticated, reject_non_fqdn_sender, check_sender_access regexp:/etc/postfix/tag_as_foreign.re, check_sender_access proxy:mysql:/etc/postfix/mysql-virtual_sender.cf'");
 			}
 		}
-		
+
 		if($mail_config['content_filter'] == 'rspamd' && ($mail_config['rspamd_password'] != $old_ini_data['mail']['rspamd_password'] || $mail_config['content_filter'] != $old_ini_data['mail']['content_filter'])) {
 			$app->load('tpl');
 
@@ -404,7 +409,7 @@ class postfix_server_plugin {
 			if($crypted_password) {
 				$rspamd_password = $crypted_password;
 			}
-			
+
 			$tpl = new tpl();
 			$tpl->newTemplate('rspamd_worker-controller.inc.master');
 			$tpl->setVar('rspamd_password', $rspamd_password);

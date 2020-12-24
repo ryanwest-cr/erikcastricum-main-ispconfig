@@ -60,10 +60,12 @@ service imap-login {
 }
 protocol imap {
   mail_plugins = quota imap_quota
+  auth_verbose = yes
 }
 protocol pop3 {
   pop3_uidl_format = %08Xu%08Xv
   mail_plugins = quota
+  auth_verbose = yes
 }
 protocol lda {
   mail_plugins = sieve quota
@@ -74,15 +76,13 @@ protocol lmtp {
   mail_plugins = quota sieve
 }
 
-mail_plugins = $mail_plugins quota
-
 #2.3+ service stats {
 #2.3+     unix_listener stats-reader {
 #2.3+         user = vmail
 #2.3+         group = vmail
 #2.3+         mode = 0660
 #2.3+     }
-#2.3+
+#2.3+ 
 #2.3+     unix_listener stats-writer {
 #2.3+         user = vmail
 #2.3+         group = vmail

@@ -361,14 +361,20 @@ if($conf['mysql']['master_slave_setup'] == 'y') {
 if($conf['apache']['installed'] == true){
 	if(!is_file($conf['apache']['vhost_conf_dir'].'/ispconfig.vhost')) $inst->install_ispconfig_interface = false;
 }
-if($conf['nginx']['installed'] == true){
+elseif($conf['nginx']['installed'] == true){
 	if(!is_file($conf['nginx']['vhost_conf_dir'].'/ispconfig.vhost')) $inst->install_ispconfig_interface = false;
+}
+else {
+	// If neither webserver is installed then this can't be the server that hosts the ispconfig interface.
+	$inst->install_ispconfig_interface = false;
 }
 
 //** Shall the services be reconfigured during update
 $reconfigure_services_answer = $inst->simple_query('Reconfigure Services?', array('yes', 'no', 'selected'), 'yes','reconfigure_services');
 
 if($reconfigure_services_answer == 'yes' || $reconfigure_services_answer == 'selected') {
+
+	checkAndRenameCustomTemplates();
 
 	if($conf['services']['mail']) {
 
@@ -483,10 +489,10 @@ if($reconfigure_services_answer == 'yes' || $reconfigure_services_answer == 'sel
 
 	}
 
-    if($conf['services']['xmpp'] && $inst->reconfigure_app('XMPP', $reconfigure_services_answer)) {
-        //** Configure Metronome XMPP
-        $inst->configure_xmpp('dont-create-certs');
-    }
+	if($conf['services']['xmpp'] && $inst->reconfigure_app('XMPP', $reconfigure_services_answer)) {
+		//** Configure Metronome XMPP
+	$inst->configure_xmpp('dont-create-certs');
+	}
 
 	if($conf['services']['firewall'] && $inst->reconfigure_app('Firewall', $reconfigure_services_answer)) {
 		if($conf['ufw']['installed'] == true) {
@@ -519,6 +525,7 @@ if($reconfigure_services_answer == 'yes' || $reconfigure_services_answer == 'sel
 //** Configure ISPConfig
 swriteln('Updating ISPConfig');
 
+$issue_asked = false;
 $issue_tried = false;
 // create acme vhost
 if($conf['nginx']['installed'] == true) {
@@ -544,15 +551,18 @@ if ($inst->install_ispconfig_interface) {
 		$inst->make_ispconfig_ssl_cert();
 		$issue_tried = true;
 	}
+	$issue_asked = true;
 }
 
 // Create SSL certs for non-webserver(s)?
-if(!file_exists('/usr/local/ispconfig/interface/ssl/ispserver.crt')) {
-    if(!$issue_tried && strtolower($inst->simple_query('Do you want to create SSL certs for your server?', array('y', 'n'), 'y','create_ssl_server_certs')) == 'y') {
-        $inst->make_ispconfig_ssl_cert();
-	}
-} else {
-	swriteln('Certificate exists. Not creating a new one.');
+if(!$issue_asked) {
+    if(!file_exists('/usr/local/ispconfig/interface/ssl/ispserver.crt')) {
+        if(!$issue_tried && strtolower($inst->simple_query('Do you want to create SSL certs for your server?', array('y', 'n'), 'y','create_ssl_server_certs')) == 'y') {
+            $inst->make_ispconfig_ssl_cert();
+	    }
+    } else {
+        swriteln('Certificate exists. Not creating a new one.');
+    }
 }
 
 $inst->install_ispconfig();
@@ -576,7 +586,7 @@ if($reconfigure_services_answer == 'yes') {
 		if($conf['saslauthd']['installed'] == true && $conf['saslauthd']['init_script'] != '') system($inst->getinitcommand($conf['saslauthd']['init_script'], 'restart'));
 		if($conf['amavis']['installed'] == true && $conf['amavis']['init_script'] != '') system($inst->getinitcommand($conf['amavis']['init_script'], 'restart'));
 		if($conf['rspamd']['installed'] == true && $conf['rspamd']['init_script'] != '') system($inst->getinitcommand($conf['rspamd']['init_script'], 'restart'));
-		if($conf['clamav']['installed'] == true && $conf['clamav']['init_script'] != '') system($inst->getinitcommand($conf['clamav']['init_script'], 'restart'));
+		if($conf['clamav']['installed'] == true && $conf['clamav']['init_script'] != '' && $conf['amavis']['installed'] == true) system($inst->getinitcommand($conf['clamav']['init_script'], 'restart'));
 		if($conf['courier']['installed'] == true){
 			if($conf['courier']['courier-authdaemon'] != '') system($inst->getinitcommand($conf['courier']['courier-authdaemon'], 'restart'));
 			if($conf['courier']['courier-imap'] != '') system($inst->getinitcommand($conf['courier']['courier-imap'], 'restart'));

@@ -1015,6 +1015,12 @@ $form["tabs"]['web'] = array(
 			'default' => 'y',
 			'value' => array(0 => 'n', 1 => 'y')
 		),
+		'overtraffic_disable_web' => array(
+			'datatype' => 'VARCHAR',
+			'formtype' => 'CHECKBOX',
+			'default' => 'y',
+			'value' => array(0 => 'n', 1 => 'y')
+		),
 		'overquota_notify_admin' => array(
 			'datatype' => 'VARCHAR',
 			'formtype' => 'CHECKBOX',
@@ -1784,7 +1790,7 @@ $form["tabs"]['jailkit'] = array(
 			'validators' => array(	0 => array('type' => 'NOTEMPTY',
 										'errmsg' => 'jailkit_chroot_home_error_empty'),
 									1 => array ( 	'type' => 'REGEX',
-										'regex' => '/^\/[a-zA-Z0-9\.\-\_\/\[\]]{1,128}$/',
+										'regex' => '/^\/[a-zA-Z0-9\.\-\_\/\[\]]{1,}$/',
 										'errmsg'=> 'jailkit_chroot_home_error_regex'),
 			),
 			'value' => '',
@@ -1798,7 +1804,7 @@ $form["tabs"]['jailkit'] = array(
 			'validators' => array(	0 => array('type' => 'NOTEMPTY',
 										'errmsg' => 'jailkit_chroot_app_sections_error_empty'),
 									1 => array ( 	'type' => 'REGEX',
-										'regex' => '/^[a-zA-Z0-9\-\_\ ]{1,128}$/',
+										'regex' => '/^[a-zA-Z0-9\.\-\_\ ]{1,}$/',
 										'errmsg'=> 'jailkit_chroot_app_sections_error_regex'),
 			),
 			'value' => '',

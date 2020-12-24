@@ -192,7 +192,7 @@ class installer_base {
 		// if(is_installed('vlogger')) $conf['vlogger']['installed'] = true;
 		// ISPConfig ships with vlogger, so it is always installed.
 		$conf['vlogger']['installed'] = true;
-		if(is_installed('cron') || is_installed('anacron')) $conf['cron']['installed'] = true;
+		if(is_installed('crontab')) $conf['cron']['installed'] = true;
 
 		if (($conf['apache']['installed'] && is_file($conf['apache']["vhost_conf_enabled_dir"]."/000-ispconfig.vhost")) || ($conf['nginx']['installed'] && is_file($conf['nginx']["vhost_conf_enabled_dir"]."/000-ispconfig.vhost"))) $this->ispconfig_interface_installed = true;
 	}
@@ -493,7 +493,7 @@ class installer_base {
 						0,
 						?,
 						?,
-						"y",
+						"n",
 						"80,443"
 					)', $conf['server_id'], $ip_type, $line);
 					$server_ip_id = $this->dbmaster->insertID();
@@ -512,7 +512,7 @@ class installer_base {
 						0,
 						?,
 						?,
-						"y",
+						"n",
 						"80,443"
 					)', $server_ip_id, $conf['server_id'], $ip_type, $line);
 				} else {
@@ -530,7 +530,7 @@ class installer_base {
 						0,
 						?,
 						?,
-						"y",
+						"n",
 						"80,443"
 					)', $conf['server_id'], $ip_type, $line);
 				}
@@ -670,6 +670,14 @@ class installer_base {
 				if ($verbose){
 					echo $query ."\n";
 				}
+				if(!$this->dbmaster->query($query, $value['db'] . '.web_database', $value['user'], $host)) {
+					$this->warning('Unable to set rights of user in master database: '.$value['db']."\n Query: ".$query."\n Error: ".$this->dbmaster->errorMessage);
+				}
+
+				$query = "GRANT SELECT ON ?? TO ?@?";
+				if ($verbose){
+					echo $query ."\n";
+				}
 				if(!$this->dbmaster->query($query, $value['db'] . '.sys_group', $value['user'], $host)) {
 					$this->warning('Unable to set rights of user in master database: '.$value['db']."\n Query: ".$query."\n Error: ".$this->dbmaster->errorMessage);
 				}
@@ -774,6 +782,20 @@ class installer_base {
 			chmod($config_dir.$configfile.'~',0600);
 		}
 
+		exec('postconf -h recipient_delimiter 2>/dev/null', $out);
+		if (strlen($out[0]) > 0) {
+			// build string like:  CONCAT(SUBSTRING_INDEX(SUBSTRING_INDEX('%u', '%%', 1), '+', 1), '@%d')
+			$addr_cleanup = "'%u'";
+			foreach (str_split($out[0]) as $delim) {
+				$recipient_delimiter = $this->db->escape( str_replace('%', '%%', $delim) );
+				$addr_cleanup = "SUBSTRING_INDEX(${addr_cleanup}, '${recipient_delimiter}', 1)";
+			}
+			$no_addr_extension = "CONCAT(${addr_cleanup}, '@%d')";
+		} else {
+			$no_addr_extension = "''";
+		}
+		unset($out);
+
 		//* Replace variables in config file template
 		$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/'.$configfile.'.master', 'tpl/'.$configfile.'.master');
 		$content = str_replace('{mysql_server_ispconfig_user}', $conf['mysql']['ispconfig_user'], $content);
@@ -781,6 +803,7 @@ class installer_base {
 		$content = str_replace('{mysql_server_database}', $conf['mysql']['database'], $content);
 		$content = str_replace('{mysql_server_ip}', $conf['mysql']['ip'], $content);
 		$content = str_replace('{server_id}', $conf['server_id'], $content);
+		$content = str_replace('{address_without_extension}', $no_addr_extension, $content);
 		wf($full_file_name, $content);
 
 		//* Changing mode and group of the new created config file
@@ -1418,7 +1441,7 @@ class installer_base {
 		$configure_lmtp = false;
 
 		// use lmtp if installed
-		if($configure_lmtp = is_file('/usr/lib/dovecot/lmtp')) {
+		if($configure_lmtp = (is_file('/usr/lib/dovecot/lmtp') || is_file('/usr/libexec/dovecot/lmtp'))) {
 			$virtual_transport = 'lmtp:unix:private/dovecot-lmtp';
 		}
 
@@ -1435,7 +1458,7 @@ class installer_base {
 		}
 
 		$config_dir = $conf['postfix']['config_dir'];
-		$quoted_config_dir = preg_quote($config_dir, '/');
+		$quoted_config_dir = preg_quote($config_dir, '|');
 		$postfix_version = `postconf -d mail_version 2>/dev/null`;
 		$postfix_version = preg_replace( '/mail_version\s*=\s*(.*)\s*/', '$1', $postfix_version );
 
@@ -1481,7 +1504,7 @@ class installer_base {
 		if ($configure_lmtp && $conf['mail']['content_filter'] === 'amavisd') {
 			for ($i = 0; isset($new_options[$i]); $i++) {
 				if ($new_options[$i] == 'reject_unlisted_recipient') {
-					array_splice($new_options, $i+1, 0, array("check_recipient_access proxy:mysql:${quoted_config_dir}/mysql-verify_recipients.cf"));
+					array_splice($new_options, $i+1, 0, array("check_recipient_access proxy:mysql:${config_dir}/mysql-verify_recipients.cf"));
 					break;
 				}
 			}
@@ -1577,7 +1600,7 @@ class installer_base {
 		}
 
 		//* dovecot-managesieved
-		if(is_file('/usr/lib/dovecot/managesieve')) {
+		if(is_file('/usr/lib/dovecot/managesieve') || is_file('/usr/libexec/dovecot/managesieve')) {
 			$dovecot_protocols .= ' sieve';
 		}
 
@@ -2841,7 +2864,7 @@ class installer_base {
 		$ip_address_match = false;
 		if(!(($svr_ip4 && in_array($svr_ip4, $dns_ips)) || ($svr_ip6 && in_array($svr_ip6, $dns_ips)))) {
 			swriteln('Server\'s public ip(s) (' . $svr_ip4 . ($svr_ip6 ? ', ' . $svr_ip6 : '') . ') not found in A/AAAA records for ' . $hostname . ': ' . implode(', ', $dns_ips));
-			if(strtolower($inst->simple_query('Ignore DNS check and continue to request certificate?', array('y', 'n') , 'n','ignore_hostname_dns')) == 'y') {
+			if(strtolower($this->simple_query('Ignore DNS check and continue to request certificate?', array('y', 'n') , 'n','ignore_hostname_dns')) == 'y') {
 				$ip_address_match = true;
 			}
 		} else {
@@ -2853,21 +2876,21 @@ class installer_base {
 
 			// This script is needed earlier to check and open http port 80 or standalone might fail
 			// Make executable and temporary symlink latest letsencrypt pre, post and renew hook script before install
-			if(file_exists(dirname(getcwd()) . '/server/scripts/letsencrypt_pre_hook.sh') && !file_exists('/usr/local/bin/letsencrypt_pre_hook.sh')) {
-				symlink(dirname(getcwd()) . '/server/scripts/letsencrypt_pre_hook.sh', '/usr/local/bin/letsencrypt_pre_hook.sh');
+			if(file_exists(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_pre_hook.sh') && !file_exists('/usr/local/bin/letsencrypt_pre_hook.sh')) {
+				symlink(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_pre_hook.sh', '/usr/local/bin/letsencrypt_pre_hook.sh');
+				chown('/usr/local/bin/letsencrypt_pre_hook.sh', 'root');
+				chmod('/usr/local/bin/letsencrypt_pre_hook.sh', 0700);
 			}
-			if(file_exists(dirname(getcwd()) . '/server/scripts/letsencrypt_post_hook.sh') && !file_exists('/usr/local/bin/letsencrypt_post_hook.sh')) {
-				symlink(dirname(getcwd()) . '/server/scripts/letsencrypt_post_hook.sh', '/usr/local/bin/letsencrypt_post_hook.sh');
+			if(file_exists(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_post_hook.sh') && !file_exists('/usr/local/bin/letsencrypt_post_hook.sh')) {
+				symlink(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_post_hook.sh', '/usr/local/bin/letsencrypt_post_hook.sh');
+				chown('/usr/local/bin/letsencrypt_post_hook.sh', 'root');
+				chmod('/usr/local/bin/letsencrypt_post_hook.sh', 0700);
 			}
-			if(file_exists(dirname(getcwd()) . '/server/scripts/letsencrypt_renew_hook.sh') && !file_exists('/usr/local/bin/letsencrypt_renew_hook.sh')) {
-				symlink(dirname(getcwd()) . '/server/scripts/letsencrypt_renew_hook.sh', '/usr/local/bin/letsencrypt_renew_hook.sh');
+			if(file_exists(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_renew_hook.sh') && !file_exists('/usr/local/bin/letsencrypt_renew_hook.sh')) {
+				symlink(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_renew_hook.sh', '/usr/local/bin/letsencrypt_renew_hook.sh');
+				chown('/usr/local/bin/letsencrypt_renew_hook.sh', 'root');
+				chmod('/usr/local/bin/letsencrypt_renew_hook.sh', 0700);
 			}
-			chown('/usr/local/bin/letsencrypt_pre_hook.sh', 'root');
-			chown('/usr/local/bin/letsencrypt_post_hook.sh', 'root');
-			chown('/usr/local/bin/letsencrypt_renew_hook.sh', 'root');
-			chmod('/usr/local/bin/letsencrypt_pre_hook.sh', 0700);
-			chmod('/usr/local/bin/letsencrypt_post_hook.sh', 0700);
-			chmod('/usr/local/bin/letsencrypt_renew_hook.sh', 0700);
 
 			// Check http port 80 status as it cannot be determined at post hook stage
 			$port80_status=exec('true &>/dev/null </dev/tcp/127.0.0.1/80 && echo open || echo close');
@@ -2999,6 +3022,10 @@ class installer_base {
 							rename($ssl_pem_file, $ssl_pem_file . '-' . $date->format('YmdHis') . '.bak');
 						}
 
+						$acme_cert_dir = '/etc/letsencrypt/live/' . $hostname;
+						symlink($acme_cert_dir . '/fullchain.pem', $ssl_crt_file);
+						symlink($acme_cert_dir . '/privkey.pem', $ssl_key_file);
+
 						$issued_successfully = true;
 					} else {
 						swriteln('Issuing certificate via certbot failed. Please check log files and make sure that your hostname can be verified by letsencrypt');
@@ -3043,42 +3070,44 @@ class installer_base {
 		}
 
 		// Build ispserver.pem file and chmod it
-		exec("cat $ssl_key_file $ssl_crt_file > $ssl_pem_file; chmod 600 $ssl_pem_file");
+		if(file_exists($ssl_key_file)) {
+			exec("cat $ssl_key_file $ssl_crt_file > $ssl_pem_file; chmod 600 $ssl_pem_file");
 
-		// Extend LE SSL certs to postfix
-		if ($conf['postfix']['installed'] == true && strtolower($this->simple_query('Symlink ISPConfig SSL certs to Postfix?', array('y', 'n'), 'y','ispconfig_postfix_ssl_symlink')) == 'y') {
+			// Extend LE SSL certs to postfix
+			if ($conf['postfix']['installed'] == true && strtolower($this->simple_query('Symlink ISPConfig SSL certs to Postfix?', array('y', 'n'), 'y','ispconfig_postfix_ssl_symlink')) == 'y') {
 
-			// Define folder, file(s)
-			$cf = $conf['postfix'];
-			$postfix_dir = $cf['config_dir'];
-			if(!is_dir($postfix_dir)) $this->error("The Postfix configuration directory '$postfix_dir' does not exist.");
-			$smtpd_crt = $postfix_dir.'/smtpd.cert';
-			$smtpd_key = $postfix_dir.'/smtpd.key';
+				// Define folder, file(s)
+				$cf = $conf['postfix'];
+				$postfix_dir = $cf['config_dir'];
+				if(!is_dir($postfix_dir)) $this->error("The Postfix configuration directory '$postfix_dir' does not exist.");
+				$smtpd_crt = $postfix_dir.'/smtpd.cert';
+				$smtpd_key = $postfix_dir.'/smtpd.key';
 
-			// Backup existing postfix ssl files
-			if (file_exists($smtpd_crt)) rename($smtpd_crt, $smtpd_crt . '-' .$date->format('YmdHis') . '.bak');
-			if (file_exists($smtpd_key)) rename($smtpd_key, $smtpd_key . '-' .$date->format('YmdHis') . '.bak');
+				// Backup existing postfix ssl files
+				if (file_exists($smtpd_crt)) rename($smtpd_crt, $smtpd_crt . '-' .$date->format('YmdHis') . '.bak');
+				if (file_exists($smtpd_key)) rename($smtpd_key, $smtpd_key . '-' .$date->format('YmdHis') . '.bak');
 
-			// Create symlink to ISPConfig SSL files
-			symlink($ssl_crt_file, $smtpd_crt);
-			symlink($ssl_key_file, $smtpd_key);
-		}
+				// Create symlink to ISPConfig SSL files
+				symlink($ssl_crt_file, $smtpd_crt);
+				symlink($ssl_key_file, $smtpd_key);
+			}
 
-		// Extend LE SSL certs to pureftpd
-		if ($conf['pureftpd']['installed'] == true && strtolower($this->simple_query('Symlink ISPConfig SSL certs to Pure-FTPd? Creating dhparam file may take some time.', array('y', 'n'), 'y','ispconfig_pureftpd_ssl_symlink')) == 'y') {
+			// Extend LE SSL certs to pureftpd
+			if ($conf['pureftpd']['installed'] == true && strtolower($this->simple_query('Symlink ISPConfig SSL certs to Pure-FTPd? Creating dhparam file may take some time.', array('y', 'n'), 'y','ispconfig_pureftpd_ssl_symlink')) == 'y') {
 
-			// Define folder, file(s)
-			$pureftpd_dir = '/etc/ssl/private';
-			if(!is_dir($pureftpd_dir)) mkdir($pureftpd_dir, 0755, true);
-			$pureftpd_pem = $pureftpd_dir.'/pure-ftpd.pem';
+				// Define folder, file(s)
+				$pureftpd_dir = '/etc/ssl/private';
+				if(!is_dir($pureftpd_dir)) mkdir($pureftpd_dir, 0755, true);
+				$pureftpd_pem = $pureftpd_dir.'/pure-ftpd.pem';
 
-			// Backup existing pureftpd ssl files
-			if (file_exists($pureftpd_pem)) rename($pureftpd_pem, $pureftpd_pem . '-' .$date->format('YmdHis') . '.bak');
+				// Backup existing pureftpd ssl files
+				if (file_exists($pureftpd_pem)) rename($pureftpd_pem, $pureftpd_pem . '-' .$date->format('YmdHis') . '.bak');
 
-			// Create symlink to ISPConfig SSL files
-			symlink($ssl_pem_file, $pureftpd_pem);
-			if (!file_exists("$pureftpd_dir/pure-ftpd-dhparams.pem"))
-				exec("cd $pureftpd_dir; openssl dhparam -out dhparam2048.pem 2048; ln -sf dhparam2048.pem pure-ftpd-dhparams.pem");
+				// Create symlink to ISPConfig SSL files
+				symlink($ssl_pem_file, $pureftpd_pem);
+				if (!file_exists("$pureftpd_dir/pure-ftpd-dhparams.pem"))
+					exec("cd $pureftpd_dir; openssl dhparam -out dhparam2048.pem 2048; ln -sf dhparam2048.pem pure-ftpd-dhparams.pem");
+			}
 		}
 
 		exec("chown -R root:root $ssl_dir");

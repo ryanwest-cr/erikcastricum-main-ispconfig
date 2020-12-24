@@ -95,34 +95,6 @@ class apache2_plugin {
 		$app->plugins->registerEvent('ftp_user_delete', $this->plugin_name, 'ftp_user_delete');
 
 		$app->plugins->registerAction('php_ini_changed', $this->plugin_name, 'php_ini_changed');
-
-		$app->plugins->registerEvent('directive_snippets_update', $this->plugin_name, 'directive_snippets');
-	}
-
-	function directive_snippets($event_name, $data) {
-		global $app, $conf;
-
-		$snippet = $data['new'];
-		if($snippet['active'] == 'y' && $snippet['update_sites'] == 'y') {
-			if($snippet['type'] == 'php') {
-				$rlike = $snippet['directive_snippets_id'].'|,'.$snippet['directive_snippets_id'].'|'.$snippet['directive_snippets_id'].',';
-				$affected_snippets = $app->db->queryAllRecords('SELECT directive_snippets_id FROM directive_snippets WHERE required_php_snippets RLIKE(?) AND type = ?', $rlike, 'apache');
-				if(is_array($affected_snippets) && !empty($affected_snippets)) {
-					foreach($affected_snippets as $snippet) $sql_in[] = $snippet['directive_snippets_id'];
-					$affected_sites = $app->db->queryAllRecords('SELECT domain_id FROM web_domain WHERE server_id = ? AND directive_snippets_id IN ?', $conf['server_id'], $sql_in);
-				}
-			}
-			if($snippet['type'] == 'apache') $affected_sites = $app->db->queryAllRecords('SELECT domain_id FROM web_domain WHERE server_id = ? AND directive_snippets_id = ?', $conf['server_id'], $snippet['directive_snippets_id']);
-
-			if(is_array($affected_sites) && !empty($affected_sites)) {
-				foreach($affected_sites as $site) {
-					$website = $app->db->queryOneRecord('SELECT * FROM web_domain WHERE domain_id = ?', $site['domain_id']);
-					$new_data['old'] = $website;
-					$new_data['new'] = $website;
-					$this->update('web_domain_update', $new_data);
-				}
-			}
-		}
 	}
 
 	private function get_master_php_ini_content($web_data) {
@@ -859,6 +831,11 @@ class apache2_plugin {
 			$programs = $jailkit_config['jailkit_chroot_app_programs'] . ' '
 				  . $jailkit_config['jailkit_chroot_cron_programs'];
 
+			$records = $app->db->queryAllRecords('SELECT web_folder FROM `web_domain` WHERE `parent_domain_id` = ? AND `document_root` = ? AND web_folder != \'\' AND web_folder IS NOT NULL AND `server_id` = ?', $data['new']['domain_id'], $data['new']['document_root'], $conf['server_id']);
+			foreach ($records as $record) {
+				$options[] = 'skip='.$record['web_folder'];
+			}
+
 			// don't update if last_jailkit_hash is the same
 			$tmp = $app->db->queryOneRecord('SELECT `last_jailkit_hash` FROM web_domain WHERE domain_id = ?', $data['new']['parent_domain_id']);
 			if ($update_hash != $tmp['last_jailkit_hash']) {
@@ -1247,13 +1224,16 @@ class apache2_plugin {
 		}
 
 		//* Create custom php.ini
-		if(trim($data['new']['custom_php_ini']) != '') {
+		# Because of custom default PHP directives from snippet
+		# php.ini custom values order os: 1. general settings 2. Directive Snippets settings 3. custom php.ini settings defined in domain settings
+		if(trim($data['new']['custom_php_ini']) != '' || $data['new']['directive_snippets_id'] > "0") {
 			$has_custom_php_ini = true;
 			$custom_sendmail_path = false;
 			if(!is_dir($custom_php_ini_dir)) $app->system->mkdirpath($custom_php_ini_dir);
 
 			$php_ini_content = $this->get_master_php_ini_content($data['new']);
-			$php_ini_content .= str_replace("\r", '', trim($data['new']['custom_php_ini']));
+
+			$php_ini_content .= "\n".str_replace("\r", '', trim($data['new']['custom_php_ini']));
 
 			if(intval($data['new']['directive_snippets_id']) > 0){
 				$snippet = $app->db->queryOneRecord("SELECT * FROM directive_snippets WHERE directive_snippets_id = ? AND type = 'apache' AND active = 'y' AND customer_viewable = 'y'", intval($data['new']['directive_snippets_id']));
@@ -1266,6 +1246,7 @@ class apache2_plugin {
 								$php_snippet = $app->db->queryOneRecord("SELECT * FROM directive_snippets WHERE directive_snippets_id = ? AND type = 'php' AND active = 'y'", $required_php_snippet);
 								$php_snippet['snippet'] = trim($php_snippet['snippet']);
 								if($php_snippet['snippet'] != ''){
+									$php_snippet['snippet'] = str_replace("\r", '', $php_snippet['snippet']);
 									$php_ini_content .= "\n".$php_snippet['snippet'];
 								}
 							}
@@ -1686,31 +1667,30 @@ class apache2_plugin {
 		 * PHP-FPM
 		 */
 		// Support for multiple PHP versions
+		$default_php_fpm = true;
 		if($data['new']['php'] == 'php-fpm'){
 			if($data['new']['server_php_id'] != 0){
-				$default_php_fpm = false;
 				$tmp_php = $app->db->queryOneRecord('SELECT * FROM server_php WHERE server_php_id = ?', $data['new']['server_php_id']);
 				if($tmp_php) {
+					$default_php_fpm = false;
 					$custom_php_fpm_ini_dir = $tmp_php['php_fpm_ini_dir'];
 					$custom_php_fpm_init_script = $tmp_php['php_fpm_init_script'];
 					$custom_php_fpm_pool_dir = $tmp_php['php_fpm_pool_dir'];
+					$custom_php_fpm_socket_dir = $tmp_php['custom_php_fpm_socket_dir'];
 					if(substr($custom_php_fpm_ini_dir, -1) != '/') $custom_php_fpm_ini_dir .= '/';
 				}
-			} else {
-				$default_php_fpm = true;
 			}
 		} else {
 			if($data['old']['server_php_id'] != 0 && ($data['old']['php'] == 'php-fpm' || $data['old']['php'] == 'hhvm')){
-				$default_php_fpm = false;
 				$tmp_php = $app->db->queryOneRecord('SELECT * FROM server_php WHERE server_php_id = ?', $data['old']['server_php_id']);
 				if($tmp_php) {
+					$default_php_fpm = false;
 					$custom_php_fpm_ini_dir = $tmp_php['php_fpm_ini_dir'];
 					$custom_php_fpm_init_script = $tmp_php['php_fpm_init_script'];
 					$custom_php_fpm_pool_dir = $tmp_php['php_fpm_pool_dir'];
+					$custom_php_fpm_socket_dir = $tmp_php['custom_php_fpm_socket_dir'];
 					if(substr($custom_php_fpm_ini_dir, -1) != '/') $custom_php_fpm_ini_dir .= '/';
 				}
-			} else {
-				$default_php_fpm = true;
 			}
 		}
 
@@ -1723,7 +1703,12 @@ class apache2_plugin {
 
 		if(substr($pool_dir, -1) != '/') $pool_dir .= '/';
 		$pool_name = 'web'.$data['new']['domain_id'];
-		$socket_dir = $web_config['php_fpm_socket_dir'];
+
+		if (!$default_php_fpm && !empty($custom_php_fpm_socket_dir)) {
+			$socket_dir = $custom_php_fpm_socket_dir;
+		} else {
+			$socket_dir = $web_config['php_fpm_socket_dir'];
+		}
 		if(substr($socket_dir, -1) != '/') $socket_dir .= '/';
 
 		if($data['new']['php_fpm_use_socket'] == 'y'){
@@ -1981,7 +1966,7 @@ class apache2_plugin {
 
 		if($data['new']['stats_type'] != '') {
 			if(!is_dir($data['new']['document_root'].'/' . $web_folder . '/stats')) $app->system->mkdir($data['new']['document_root'].'/' . $web_folder . '/stats');
-			$ht_file = "AuthType Basic\nAuthName \"Members Only\"\nAuthUserFile ".$data['new']['document_root']."/web/stats/.htpasswd_stats\nrequire valid-user\nDirectoryIndex index.html index.php\nHeader unset Content-Security-Policy\n<Files \"goaindex.html\">\nAddDefaultCharset UTF-8\n</Files>\n";
+			$ht_file = "AuthType Basic\nAuthName \"Members Only\"\nAuthUserFile ".$data['new']['document_root']."/web/stats/.htpasswd_stats\nrequire valid-user\nDirectoryIndex index.html index.php\nHeader set Content-Security-Policy \"default-src * 'self' 'unsafe-inline' 'unsafe-eval' data:;\"\n<Files \"goaindex.html\">\nAddDefaultCharset UTF-8\n</Files>\n";
 			$app->system->file_put_contents($data['new']['document_root'].'/' . $web_folder . '/stats/.htaccess', $ht_file);
 			$app->system->chmod($data['new']['document_root'].'/' . $web_folder . '/stats/.htaccess', 0755);
 			unset($ht_file);
@@ -3264,7 +3249,7 @@ class apache2_plugin {
 						foreach($required_php_snippets as $required_php_snippet){
 							$required_php_snippet = intval($required_php_snippet);
 							if($required_php_snippet > 0){
-								$php_snippet = $app->db->queryOneRecord("SELECT * FROM directive_snippets WHERE ".($snippet['master_directive_snippets_id'] > 0 ? 'master_' : '')."directive_snippets_id = ? AND type = 'php' AND active = 'y'", $required_php_snippet);
+								$php_snippet = $app->db->queryOneRecord("SELECT * FROM directive_snippets WHERE directive_snippets_id = ? AND type = 'php' AND active = 'y'", $required_php_snippet);
 								$php_snippet['snippet'] = trim($php_snippet['snippet']);
 								if($php_snippet['snippet'] != ''){
 									$custom_php_ini_settings .= "\n".$php_snippet['snippet'];
@@ -3322,31 +3307,29 @@ class apache2_plugin {
 		$pool_dir = trim($pool_dir);
 		//$reload = false;
 
+		$default_php_fpm = true;
+
 		if($data['new']['php'] == 'php-fpm'){
 			if($data['new']['server_php_id'] != 0){
-				$default_php_fpm = false;
 				$tmp_php = $app->db->queryOneRecord('SELECT * FROM server_php WHERE server_php_id = ?', $data['new']['server_php_id']);
 				if($tmp_php) {
+					$default_php_fpm = false;
 					$custom_php_fpm_ini_dir = $tmp_php['php_fpm_ini_dir'];
 					$custom_php_fpm_init_script = $tmp_php['php_fpm_init_script'];
 					$custom_php_fpm_pool_dir = $tmp_php['php_fpm_pool_dir'];
 					if(substr($custom_php_fpm_ini_dir, -1) != '/') $custom_php_fpm_ini_dir .= '/';
 				}
-			} else {
-				$default_php_fpm = true;
 			}
 		} else {
 			if($data['old']['server_php_id'] != 0 && $data['old']['php'] == 'php-fpm'){
-				$default_php_fpm = false;
 				$tmp_php = $app->db->queryOneRecord('SELECT * FROM server_php WHERE server_php_id = ?', $data['old']['server_php_id']);
 				if($tmp_php) {
+					$default_php_fpm = false;
 					$custom_php_fpm_ini_dir = $tmp_php['php_fpm_ini_dir'];
 					$custom_php_fpm_init_script = $tmp_php['php_fpm_init_script'];
 					$custom_php_fpm_pool_dir = $tmp_php['php_fpm_pool_dir'];
 					if(substr($custom_php_fpm_ini_dir, -1) != '/') $custom_php_fpm_ini_dir .= '/';
 				}
-			} else {
-				$default_php_fpm = true;
 			}
 		}
 
@@ -3437,7 +3420,7 @@ class apache2_plugin {
 					foreach($required_php_snippets as $required_php_snippet){
 						$required_php_snippet = intval($required_php_snippet);
 						if($required_php_snippet > 0){
-							$php_snippet = $app->db->queryOneRecord("SELECT * FROM directive_snippets WHERE ".($snippet['master_directive_snippets_id'] > 0 ? 'master_' : '')."directive_snippets_id = ? AND type = 'php' AND active = 'y'", $required_php_snippet);
+							$php_snippet = $app->db->queryOneRecord("SELECT * FROM directive_snippets WHERE directive_snippets_id = ? AND type = 'php' AND active = 'y'", $required_php_snippet);
 							$php_snippet['snippet'] = trim($php_snippet['snippet']);
 							if($php_snippet['snippet'] != ''){
 								$custom_php_ini_settings .= "\n".$php_snippet['snippet'];
@@ -3544,17 +3527,17 @@ class apache2_plugin {
 
 		$php_fpm_reload_mode = ($web_config['php_fpm_reload_mode'] == 'reload')?'reload':'restart';
 
+		$default_php_fpm = true;
+
 		if($data['old']['server_php_id'] != 0 && $data['old']['php'] == 'php-fpm'){
-			$default_php_fpm = false;
 			$tmp_php = $app->db->queryOneRecord('SELECT * FROM server_php WHERE server_php_id = ?', $data['old']['server_php_id']);
 			if($tmp_php) {
+				$default_php_fpm = false;
 				$custom_php_fpm_ini_dir = $tmp_php['php_fpm_ini_dir'];
 				$custom_php_fpm_init_script = $tmp_php['php_fpm_init_script'];
 				$custom_php_fpm_pool_dir = $tmp_php['php_fpm_pool_dir'];
 				if(substr($custom_php_fpm_ini_dir, -1) != '/') $custom_php_fpm_ini_dir .= '/';
 			}
-		} else {
-			$default_php_fpm = true;
 		}
 
 		if($default_php_fpm){
@@ -3707,7 +3690,7 @@ class apache2_plugin {
 
 	function _setup_jailkit_chroot()
 	{
-		global $app;
+		global $app, $conf;
 
 		$app->uses('system');
 
@@ -3768,6 +3751,11 @@ class apache2_plugin {
 
 			if ($this->website['new_jailkit_hash'] == $this->website['last_jailkit_hash']) {
 				return;
+			}
+
+			$records = $app->db->queryAllRecords('SELECT web_folder FROM `web_domain` WHERE `parent_domain_id` = ? AND `document_root` = ? AND web_folder != \'\' AND web_folder IS NOT NULL AND `server_id` = ?', $this->website['domain_id'], $this->website['document_root'], $conf['server_id']);
+			foreach ($records as $record) {
+				$options[] = 'skip='.$record['web_folder'];
 			}
 
 			$app->system->update_jailkit_chroot($this->website['document_root'], $sections, $programs, $options);
@@ -3848,7 +3836,13 @@ class apache2_plugin {
 			return;
 		}
 
-		$app->system->delete_jailkit_chroot($parent_domain['document_root']);
+		$options = array();
+		$records = $app->db->queryAllRecords('SELECT web_folder FROM `web_domain` WHERE `parent_domain_id` = ? AND `document_root` = ? AND web_folder != \'\' AND web_folder IS NOT NULL AND `server_id` = ?', $parent_domain_id, $parent_domain['document_root'], $conf['server_id']);
+		foreach ($records as $record) {
+			$options[] = 'skip='.$record['web_folder'];
+		}
+
+		$app->system->delete_jailkit_chroot($parent_domain['document_root'], $options);
 
 		// this gets last_jailkit_update out of sync with master db, but that is ok,
 		// as it is only used as a timestamp to moderate the frequency of updating on the slaves

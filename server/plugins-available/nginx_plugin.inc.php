@@ -90,35 +90,6 @@ class nginx_plugin {
 
 		$app->plugins->registerEvent('web_folder_update', $this->plugin_name, 'web_folder_update');
 		$app->plugins->registerEvent('web_folder_delete', $this->plugin_name, 'web_folder_delete');
-
-		$app->plugins->registerEvent('directive_snippets_update', $this->plugin_name, 'directive_snippets');
-	}
-
-	function directive_snippets($event_name, $data) {
-		global $app, $conf;
-
-		$snippet = $data['new'];
-
-		if($snippet['active'] == 'y' && $snippet['update_sites'] == 'y') {
-			if($snippet['type'] == 'php') {
-				$rlike = $snippet['directive_snippets_id'].'|,'.$snippet['directive_snippets_id'].'|'.$snippet['directive_snippets_id'].',';
-				$affected_snippets = $app->db->queryAllRecords('SELECT directive_snippets_id FROM directive_snippets WHERE required_php_snippets RLIKE(?) AND type = ?', $rlike, 'nginx');
-				if(is_array($affected_snippets) && !empty($affected_snippets)) {
-					foreach($affected_snippets as $snippet) $sql_in[] = $snippet['directive_snippets_id'];
-					$affected_sites = $app->db->queryAllRecords('SELECT domain_id FROM web_domain WHERE server_id = ? AND directive_snippets_id IN ?', $conf['server_id'], $sql_in);
-				}
-			}
-			if($snippet['type'] == 'nginx') $affected_sites = $app->db->queryAllRecords('SELECT domain_id FROM web_domain WHERE server_id = ? AND directive_snippets_id = ?', $conf['server_id'], $snippet['directive_snippets_id']);
-
-			if(is_array($affected_sites) && !empty($affected_sites)) {
-				foreach($affected_sites as $site) {
-					$website = $app->db->queryOneRecord('SELECT * FROM web_domain WHERE domain_id = ?', $site['domain_id']);
-					$new_data['old'] = $website;
-					$new_data['new'] = $website;
-					$this->update('web_domain_update', $new_data);
-				}
-			}
-		}
 	}
 
 	// Handle the creation of SSL certificates
@@ -698,6 +669,11 @@ class nginx_plugin {
 			$programs = $jailkit_config['jailkit_chroot_app_programs'] . ' '
 				  . $jailkit_config['jailkit_chroot_cron_programs'];
 
+			$records = $app->db->queryAllRecords('SELECT web_folder FROM `web_domain` WHERE `parent_domain_id` = ? AND `document_root` = ? AND web_folder != \'\' AND web_folder IS NOT NULL AND `server_id` = ?', $data['new']['domain_id'], $data['new']['document_root'], $conf['server_id']);
+			foreach ($records as $record) {
+				$options[] = 'skip='.$record['web_folder'];
+			}
+
 			// don't update if last_jailkit_hash is the same
 			$tmp = $app->db->queryOneRecord('SELECT `last_jailkit_hash` FROM web_domain WHERE domain_id = ?', $data['new']['parent_domain_id']);
 			if ($update_hash != $tmp['last_jailkit_hash']) {
@@ -1108,31 +1084,31 @@ class nginx_plugin {
 		}
 		if($data['new']['ip_address'] == '*' && $data['new']['ipv6_address'] == '') $tpl->setVar('ipv6_wildcard', 1);
 
+		$default_php_fpm = true;
+
 		if($data['new']['php'] == 'php-fpm' || $data['new']['php'] == 'hhvm'){
 			if($data['new']['server_php_id'] != 0){
-				$default_php_fpm = false;
 				$tmp_php = $app->db->queryOneRecord('SELECT * FROM server_php WHERE server_php_id = ?', $data['new']['server_php_id']);
 				if($tmp_php) {
+					$default_php_fpm = false;
 					$custom_php_fpm_ini_dir = $tmp_php['php_fpm_ini_dir'];
 					$custom_php_fpm_init_script = $tmp_php['php_fpm_init_script'];
 					$custom_php_fpm_pool_dir = $tmp_php['php_fpm_pool_dir'];
+					$custom_php_fpm_socket_dir = $tmp_php['php_fpm_socket_dir'];
 					if(substr($custom_php_fpm_ini_dir, -1) != '/') $custom_php_fpm_ini_dir .= '/';
 				}
-			} else {
-				$default_php_fpm = true;
 			}
 		} else {
 			if($data['old']['server_php_id'] != 0 && $data['old']['php'] != 'no'){
-				$default_php_fpm = false;
 				$tmp_php = $app->db->queryOneRecord('SELECT * FROM server_php WHERE server_php_id = ?', $data['old']['server_php_id']);
 				if($tmp_php) {
+					$default_php_fpm = false;
 					$custom_php_fpm_ini_dir = $tmp_php['php_fpm_ini_dir'];
 					$custom_php_fpm_init_script = $tmp_php['php_fpm_init_script'];
 					$custom_php_fpm_pool_dir = $tmp_php['php_fpm_pool_dir'];
+					$custom_php_fpm_socket_dir = $tmp_php['php_fpm_socket_dir'];
 					if(substr($custom_php_fpm_ini_dir, -1) != '/') $custom_php_fpm_ini_dir .= '/';
 				}
-			} else {
-				$default_php_fpm = true;
 			}
 		}
 
@@ -1144,7 +1120,12 @@ class nginx_plugin {
 		$pool_dir = trim($pool_dir);
 		if(substr($pool_dir, -1) != '/') $pool_dir .= '/';
 		$pool_name = 'web'.$data['new']['domain_id'];
-		$socket_dir = $web_config['php_fpm_socket_dir'];
+
+		if (!$default_php_fpm && !empty($custom_php_fpm_socket_dir)) {
+			$socket_dir = $custom_php_fpm_socket_dir;
+		} else {
+			$socket_dir = $web_config['php_fpm_socket_dir'];
+		}
 		if(substr($socket_dir, -1) != '/') $socket_dir .= '/';
 
 		if($data['new']['php_fpm_use_socket'] == 'y'){
@@ -1508,7 +1489,7 @@ class nginx_plugin {
 						}
 					} else {
 						// external URL
-						$rewrite_exclude = '(.?)/';
+						$rewrite_exclude = '(?!\.well-known/acme-challenge)/';
 						if($data['new']['redirect_type'] == 'proxy'){
 							$vhost_data['use_proxy'] = 'y';
 							$rewrite_subdir = $tmp_redirect_path_parts['path'];
@@ -1560,7 +1541,7 @@ class nginx_plugin {
 						}
 					} else {
 						// external URL
-						$rewrite_exclude = '(.?)/';
+						$rewrite_exclude = '(?!\.well-known/acme-challenge)/';
 						if($data['new']['redirect_type'] == 'proxy'){
 							$vhost_data['use_proxy'] = 'y';
 							$rewrite_subdir = $tmp_redirect_path_parts['path'];
@@ -1610,7 +1591,7 @@ class nginx_plugin {
 						}
 					} else {
 						// external URL
-						$rewrite_exclude = '(.?)/';
+						$rewrite_exclude = '(?!\.well-known/acme-challenge)/';
 						if($data['new']['redirect_type'] == 'proxy'){
 							$vhost_data['use_proxy'] = 'y';
 							$rewrite_subdir = $tmp_redirect_path_parts['path'];
@@ -1649,6 +1630,16 @@ class nginx_plugin {
 
 		// set logging variable
 		$vhost_data['logging'] = $web_config['logging'];
+
+		// Provide TLS 1.3 support if Nginx version is >= 1.13.0 and when it was linked against OpenSSL(>=1.1.1) at build time and when it was linked against OpenSSL(>=1.1.1) at runtime.
+		$nginx_openssl_build_ver = $app->system->exec_safe('nginx -V 2>&1 | grep \'built with OpenSSL\' | sed \'s/.*built\([a-zA-Z ]*\)OpenSSL \([0-9.]*\).*/\2/\'');
+		$nginx_openssl_running_ver = $app->system->exec_safe('nginx -V 2>&1 | grep \'running with OpenSSL\' | sed \'s/.*running\([a-zA-Z ]*\)OpenSSL \([0-9.]*\).*/\2/\'');
+		if(version_compare($app->system->getnginxversion(true), '1.13.0', '>=')
+			&& version_compare($nginx_openssl_build_ver, '1.1.1', '>=')
+			&& (empty($nginx_openssl_running_ver) || version_compare($nginx_openssl_running_ver, '1.1.1', '>='))) {
+			$app->log('Enable TLS 1.3 for: '.$domain, LOGLEVEL_DEBUG);
+			$vhost_data['tls13_supported'] = "y";
+		}
 
 		$tpl->setVar($vhost_data);
 
@@ -2829,7 +2820,7 @@ class nginx_plugin {
 						foreach($required_php_snippets as $required_php_snippet){
 							$required_php_snippet = intval($required_php_snippet);
 							if($required_php_snippet > 0){
-								$php_snippet = $app->db->queryOneRecord("SELECT * FROM directive_snippets WHERE ".($snippet['master_directive_snippets_id'] > 0 ? 'master_' : '')."directive_snippets_id = ? AND type = 'php' AND active = 'y'", $required_php_snippet);
+								$php_snippet = $app->db->queryOneRecord("SELECT * FROM directive_snippets WHERE directive_snippets_id = ? AND type = 'php' AND active = 'y'", $required_php_snippet);
 								$php_snippet['snippet'] = trim($php_snippet['snippet']);
 								if($php_snippet['snippet'] != ''){
 									$custom_php_ini_settings .= "\n".$php_snippet['snippet'];
@@ -2888,31 +2879,29 @@ class nginx_plugin {
 		$rh_releasefiles = array('/etc/centos-release', '/etc/redhat-release');
 
 		// HHVM => PHP-FPM-Fallback
+		$default_php_fpm = true;
+
 		if($data['new']['php'] == 'php-fpm' || $data['new']['php'] == 'hhvm'){
 			if($data['new']['server_php_id'] != 0){
-				$default_php_fpm = false;
 				$tmp_php = $app->db->queryOneRecord('SELECT * FROM server_php WHERE server_php_id = ?', $data['new']['server_php_id']);
 				if($tmp_php) {
+					$default_php_fpm = false;
 					$custom_php_fpm_ini_dir = $tmp_php['php_fpm_ini_dir'];
 					$custom_php_fpm_init_script = $tmp_php['php_fpm_init_script'];
 					$custom_php_fpm_pool_dir = $tmp_php['php_fpm_pool_dir'];
 					if(substr($custom_php_fpm_ini_dir, -1) != '/') $custom_php_fpm_ini_dir .= '/';
 				}
-			} else {
-				$default_php_fpm = true;
 			}
 		} else {
 			if($data['old']['server_php_id'] != 0 && $data['old']['php'] != 'no'){
-				$default_php_fpm = false;
 				$tmp_php = $app->db->queryOneRecord('SELECT * FROM server_php WHERE server_php_id = ?', $data['old']['server_php_id']);
 				if($tmp_php) {
+					$default_php_fpm = false;
 					$custom_php_fpm_ini_dir = $tmp_php['php_fpm_ini_dir'];
 					$custom_php_fpm_init_script = $tmp_php['php_fpm_init_script'];
 					$custom_php_fpm_pool_dir = $tmp_php['php_fpm_pool_dir'];
 					if(substr($custom_php_fpm_ini_dir, -1) != '/') $custom_php_fpm_ini_dir .= '/';
 				}
-			} else {
-				$default_php_fpm = true;
 			}
 		}
 
@@ -3016,7 +3005,7 @@ class nginx_plugin {
 					foreach($required_php_snippets as $required_php_snippet){
 						$required_php_snippet = intval($required_php_snippet);
 						if($required_php_snippet > 0){
-							$php_snippet = $app->db->queryOneRecord("SELECT * FROM directive_snippets WHERE ".($snippet['master_directive_snippets_id'] > 0 ? 'master_' : '')."directive_snippets_id = ? AND type = 'php' AND active = 'y'", $required_php_snippet);
+							$php_snippet = $app->db->queryOneRecord("SELECT * FROM directive_snippets WHERE directive_snippets_id = ? AND type = 'php' AND active = 'y'", $required_php_snippet);
 							$php_snippet['snippet'] = trim($php_snippet['snippet']);
 							if($php_snippet['snippet'] != ''){
 								$custom_php_ini_settings .= "\n".$php_snippet['snippet'];
@@ -3114,17 +3103,17 @@ class nginx_plugin {
 	private function php_fpm_pool_delete ($data, $web_config) {
 		global $app, $conf;
 
+		$default_php_fpm = true;
+
 		if($data['old']['server_php_id'] != 0 && $data['old']['php'] != 'no'){
-			$default_php_fpm = false;
 			$tmp_php = $app->db->queryOneRecord('SELECT * FROM server_php WHERE server_php_id = ?', $data['old']['server_php_id']);
 			if($tmp_php) {
+				$default_php_fpm = false;
 				$custom_php_fpm_ini_dir = $tmp_php['php_fpm_ini_dir'];
 				$custom_php_fpm_init_script = $tmp_php['php_fpm_init_script'];
 				$custom_php_fpm_pool_dir = $tmp_php['php_fpm_pool_dir'];
 				if(substr($custom_php_fpm_ini_dir, -1) != '/') $custom_php_fpm_ini_dir .= '/';
 			}
-		} else {
-			$default_php_fpm = true;
 		}
 
 		if($default_php_fpm){
@@ -3479,7 +3468,7 @@ class nginx_plugin {
 
 	function _setup_jailkit_chroot()
 	{
-		global $app;
+		global $app, $conf;
 
 		$app->uses('system');
 
@@ -3540,6 +3529,11 @@ class nginx_plugin {
 
 			if ($this->website['new_jailkit_hash'] == $this->website['last_jailkit_hash']) {
 				return;
+			}
+
+			$records = $app->db->queryAllRecords('SELECT web_folder FROM `web_domain` WHERE `parent_domain_id` = ? AND `document_root` = ? AND web_folder != \'\' AND web_folder IS NOT NULL AND `server_id` = ?', $this->website['domain_id'], $this->website['document_root'], $conf['server_id']);
+			foreach ($records as $record) {
+				$options[] = 'skip='.$record['web_folder'];
 			}
 
 			$app->system->update_jailkit_chroot($this->website['document_root'], $sections, $programs, $options);
@@ -3619,7 +3613,13 @@ class nginx_plugin {
 			return;
 		}
 
-		$app->system->delete_jailkit_chroot($parent_domain['document_root']);
+		$options = array();
+		$records = $app->db->queryAllRecords('SELECT web_folder FROM `web_domain` WHERE `parent_domain_id` = ? AND `document_root` = ? AND web_folder != \'\' AND web_folder IS NOT NULL AND `server_id` = ?', $parent_domain_id, $parent_domain['document_root'], $conf['server_id']);
+		foreach ($records as $record) {
+			$options[] = 'skip='.$record['web_folder'];
+		}
+
+		$app->system->delete_jailkit_chroot($parent_domain['document_root'], $options);
 
 		// this gets last_jailkit_update out of sync with master db, but that is ok,
 		// as it is only used as a timestamp to moderate the frequency of updating on the slaves

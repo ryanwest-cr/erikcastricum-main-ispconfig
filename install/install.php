@@ -172,6 +172,11 @@ if(is_dir('/usr/local/ispconfig')) {
 //** Detect the installed applications
 $inst->find_installed_apps();
 
+//* crontab required by ISPConfig
+if(!$conf['cron']['installed']) {
+	die("crontab not found; please install a compatible cron daemon before ISPConfig\n\n");
+}
+
 //** Select the language and set default timezone
 $conf['language'] = $inst->simple_query('Select language', array('en', 'de'), 'en','language');
 $conf['timezone'] = get_system_timezone();
@@ -545,6 +550,7 @@ if($conf['apache']['installed'] == true) {
 }
 
 //** Configure ISPConfig :-)
+$issue_asked = false;
 $issue_tried = false;
 $install_ispconfig_interface_default = ($conf['mysql']['master_slave_setup'] == 'y')?'n':'y';
 if($install_mode == 'standard' || strtolower($inst->simple_query('Install ISPConfig Web Interface', array('y', 'n'), $install_ispconfig_interface_default,'install_ispconfig_web_interface')) == 'y') {
@@ -574,6 +580,7 @@ if($install_mode == 'standard' || strtolower($inst->simple_query('Install ISPCon
 		$inst->make_ispconfig_ssl_cert();
 		$issue_tried = true;
 	}
+	$issue_asked = true;
 	$inst->install_ispconfig_interface = true;
 
 } else {
@@ -581,12 +588,14 @@ if($install_mode == 'standard' || strtolower($inst->simple_query('Install ISPCon
 }
 
 // Create SSL certs for non-webserver(s)?
-if(!file_exists('/usr/local/ispconfig/interface/ssl/ispserver.crt')) {
-    if(!$issue_tried && strtolower($inst->simple_query('Do you want to create SSL certs for your server?', array('y', 'n'), 'y','create_ssl_server_certs')) == 'y') {
-        $inst->make_ispconfig_ssl_cert();
-	}
-} else {
-	swriteln('Certificate exists. Not creating a new one.');
+if(!$issue_asked) {
+    if(!file_exists('/usr/local/ispconfig/interface/ssl/ispserver.crt')) {
+        if(!$issue_tried && strtolower($inst->simple_query('Do you want to create SSL certs for your server?', array('y', 'n'), 'y','create_ssl_server_certs')) == 'y') {
+            $inst->make_ispconfig_ssl_cert();
+	    }
+    } else {
+        swriteln('Certificate exists. Not creating a new one.');
+    }
 }
 
 if($conf['services']['web'] == true) {
@@ -603,10 +612,7 @@ $inst->configure_dbserver();
 
 //* Configure ISPConfig
 swriteln('Installing ISPConfig crontab');
-if($conf['cron']['installed']) {
-	swriteln('Installing ISPConfig crontab');
-	$inst->install_crontab();
-} else swriteln('[ERROR] Cron not found');
+$inst->install_crontab();
 
 swriteln('Detect IP addresses');
 $inst->detect_ips();
@@ -617,7 +623,7 @@ if($conf['postfix']['installed'] == true && $conf['postfix']['init_script'] != '
 if($conf['saslauthd']['installed'] == true && $conf['saslauthd']['init_script'] != '') system($inst->getinitcommand($conf['saslauthd']['init_script'], 'restart'));
 if($conf['amavis']['installed'] == true && $conf['amavis']['init_script'] != '') system($inst->getinitcommand($conf['amavis']['init_script'], 'restart'));
 if($conf['rspamd']['installed'] == true && $conf['rspamd']['init_script'] != '') system($inst->getinitcommand($conf['rspamd']['init_script'], 'restart'));
-if($conf['clamav']['installed'] == true && $conf['clamav']['init_script'] != '') system($inst->getinitcommand($conf['clamav']['init_script'], 'restart'));
+if($conf['clamav']['installed'] == true && $conf['clamav']['init_script'] != '' && $conf['amavis']['installed'] == true) system($inst->getinitcommand($conf['clamav']['init_script'], 'restart'));
 if($conf['courier']['installed'] == true){
 	if($conf['courier']['courier-authdaemon'] != '') system($inst->getinitcommand($conf['courier']['courier-authdaemon'], 'restart'));
 	if($conf['courier']['courier-imap'] != '') system($inst->getinitcommand($conf['courier']['courier-imap'], 'restart'));
