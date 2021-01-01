@@ -6,3 +6,5 @@ ALTER TABLE `server_php` ADD `php_fpm_socket_dir` varchar(255) DEFAULT NULL AFTE
 
 -- fix #5939
 UPDATE `ftp_user` SET `expires` = NULL WHERE `expires` = '0000-00-00 00:00:00';
+
+ALTER TABLE `dns_soa` ADD `rendered_zone` MEDIUMTEXT NULL AFTER `dnssec_info`;

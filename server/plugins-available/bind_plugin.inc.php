@@ -328,9 +328,14 @@ class bind_plugin {
 			$filename = $dns_config['bind_zonefiles_dir'].'/' . $this->zone_file_prefix() . str_replace("/", "_", substr($zone['origin'], 0, -1));
 
 			$old_zonefile = @file_get_contents($filename);
-			file_put_contents($filename, $tpl->grab());
+			$rendered_zone = $tpl->grab();
+			file_put_contents($filename, $rendered_zone);
+
 			chown($filename, $dns_config['bind_user']);
 			chgrp($filename, $dns_config['bind_group']);
+
+			// Store also in the db for exports.
+			$app->dbmaster->query("UPDATE `dns_soa` SET `rendered_zone`=?", $rendered_zone);
 
 			//* Check the zonefile
 			if(is_file($filename.'.err')) unlink($filename.'.err');
