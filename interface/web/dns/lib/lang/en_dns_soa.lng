@@ -43,4 +43,5 @@ $wb['soa_cannot_be_changed_txt'] = 'The Zone (SOA) can not be changed. Please co
 $wb['configuration_error_txt'] = 'CONFIGURATION ERROR';
 $wb['dnssec_algo_txt'] = 'DNSSEC Algorithm';
 $wb['rendered_zone_txt'] = 'Bind zone format for reference and export.';
+$wb['rendered_zone_unavailable_txt'] = 'Sorry, no data is available yet.';
 ?>
