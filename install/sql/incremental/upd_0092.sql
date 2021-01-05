@@ -1,4 +1,3 @@
-
 -- drop old php column because new installations don't have them (fails in multi-server)
 ALTER TABLE `web_domain` DROP COLUMN `fastcgi_php_version`;
 
@@ -7,7 +6,3 @@ ALTER TABLE `server_php` ADD `php_fpm_socket_dir` varchar(255) DEFAULT NULL AFTE
 
 -- fix #5939
 UPDATE `ftp_user` SET `expires` = NULL WHERE `expires` = '0000-00-00 00:00:00';
-
-ALTER TABLE `dns_soa` ADD `rendered_zone` MEDIUMTEXT NULL AFTER `dnssec_info`;
-
-ALTER TABLE `remote_user` MODIFY `remote_password` VARCHAR(200) NOT NULL DEFAULT '';
