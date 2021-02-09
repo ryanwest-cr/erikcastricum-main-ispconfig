@@ -43,6 +43,15 @@ class installer_base {
 		global $conf; //TODO: maybe $conf  should be passed to constructor
 	}
 
+	private function install_acme() {
+		$install_cmd = 'wget -O -  https://get.acme.sh | sh';
+		$ret = null;
+		$val = 0;
+		exec($install_cmd . ' 2>&1', $ret, $val);
+
+		return ($val == 0 ? true : false);
+	}
+
 	//: TODO  Implement the translation function and language files for the installer.
 	public function lng($text) {
 		return $text;
@@ -674,9 +683,6 @@ class installer_base {
 				if ($verbose){
 					echo $query ."\n";
 				}
-				if(!$this->dbmaster->query($query, $value['db'] . '.software_update_inst', $value['user'], $host)) {
-					$this->warning('Unable to set rights of user in master database: '.$value['db']."\n Query: ".$query."\n Error: ".$this->dbmaster->errorMessage);
-				}
 
 				$query = "GRANT SELECT, UPDATE(`updated`) ON ?? TO ?@?";
 				if ($verbose){
@@ -1051,58 +1057,12 @@ class installer_base {
 		$postfix_version = preg_replace('/.*=\s*/', '', $out[0]);
 		unset($out);
 
-		//* mysql-virtual_domains.cf
-		$this->process_postfix_config('mysql-virtual_domains.cf');
+		//* Install virtual mappings
+		foreach (glob('tpl/mysql-virtual_*.master') as $filename) {
+			$this->process_postfix_config( basename($filename, '.master') );
+		}
 
-		//* mysql-virtual_forwardings.cf
-		$this->process_postfix_config('mysql-virtual_forwardings.cf');
-
-		//* mysql-virtual_alias_domains.cf
-		$this->process_postfix_config('mysql-virtual_alias_domains.cf');
-
-		//* mysql-virtual_alias_maps.cf
-		$this->process_postfix_config('mysql-virtual_alias_maps.cf');
-
-		//* mysql-virtual_mailboxes.cf
-		$this->process_postfix_config('mysql-virtual_mailboxes.cf');
-
-		//* mysql-virtual_email2email.cf
-		$this->process_postfix_config('mysql-virtual_email2email.cf');
-
-		//* mysql-virtual_transports.cf
-		$this->process_postfix_config('mysql-virtual_transports.cf');
-
-		//* mysql-virtual_recipient.cf
-		$this->process_postfix_config('mysql-virtual_recipient.cf');
-
-		//* mysql-virtual_sender.cf
-		$this->process_postfix_config('mysql-virtual_sender.cf');
-
-		//* mysql-virtual_sender_login_maps.cf
-		$this->process_postfix_config('mysql-virtual_sender_login_maps.cf');
-
-		//* mysql-virtual_client.cf
-		$this->process_postfix_config('mysql-virtual_client.cf');
-
-		//* mysql-virtual_relaydomains.cf
-		$this->process_postfix_config('mysql-virtual_relaydomains.cf');
-
-		//* mysql-virtual_relayrecipientmaps.cf
-		$this->process_postfix_config('mysql-virtual_relayrecipientmaps.cf');
-
-		//* mysql-virtual_outgoing_bcc.cf
-		$this->process_postfix_config('mysql-virtual_outgoing_bcc.cf');
-
-		//* mysql-virtual_policy_greylist.cf
-		$this->process_postfix_config('mysql-virtual_policy_greylist.cf');
-
-		//* mysql-virtual_gids.cf.master
-		$this->process_postfix_config('mysql-virtual_gids.cf');
-
-		//* mysql-virtual_uids.cf
-		$this->process_postfix_config('mysql-virtual_uids.cf');
-
-		//* mysql-virtual_alias_domains.cf
+		//* mysql-verify_recipients.cf
 		$this->process_postfix_config('mysql-verify_recipients.cf');
 
 		// test if lmtp if available
@@ -1240,6 +1200,7 @@ class installer_base {
 		touch($config_dir.'/mime_header_checks');
 		touch($config_dir.'/nested_header_checks');
 		touch($config_dir.'/body_checks');
+		touch($config_dir.'/sasl_passwd');
 
 		//* Create the mailman files
 		if(!is_dir('/var/lib/mailman/data')) exec('mkdir -p /var/lib/mailman/data');
@@ -1796,11 +1757,18 @@ class installer_base {
 				$new_options[] = $value;
 			}
 			if ($mail_config['reject_sender_login_mismatch'] == 'y') {
-				array_splice($new_options, 0, 0, array('reject_authenticated_sender_login_mismatch'));
-
+				// insert before permit_mynetworks
 				for ($i = 0; isset($new_options[$i]); $i++) {
 					if ($new_options[$i] == 'permit_mynetworks') {
-						array_splice($new_options, $i+1, 0, array('reject_sender_login_mismatch'));
+						array_splice($new_options, $i, 0, array('reject_authenticated_sender_login_mismatch'));
+						break;
+					}
+				}
+
+				// insert before permit_sasl_authenticated
+				for ($i = 0; isset($new_options[$i]); $i++) {
+					if ($new_options[$i] == 'permit_sasl_authenticated') {
+						array_splice($new_options, $i, 0, array('reject_sender_login_mismatch'));
 						break;
 					}
 				}
@@ -2946,6 +2914,21 @@ class installer_base {
 			$acme = explode("\n", shell_exec('which /usr/local/ispconfig/server/scripts/acme.sh /root/.acme.sh/acme.sh'));
 			$acme = reset($acme);
 
+			if((!$acme || !is_executable($acme)) && (!$le_client || !is_executable($le_client))) {
+				$success = $this->install_acme();
+				if(!$success) {
+					swriteln('Failed installing acme.sh. Will not be able to issue certificate during install.');
+				} else {
+					$acme = explode("\n", shell_exec('which /usr/local/ispconfig/server/scripts/acme.sh /root/.acme.sh/acme.sh'));
+					$acme = reset($acme);
+					if($acme && is_executable($acme)) {
+						swriteln('Installed acme.sh and using it for certificate creation during install.');
+					} else {
+						swriteln('Failed installing acme.sh. Will not be able to issue certificate during install.');
+					}
+				}
+			}
+
 			$restore_conf_symlink = false;
 
 			// we only need this for apache, so use fixed conf index
@@ -2976,15 +2959,24 @@ class installer_base {
 			$issued_successfully = false;
 
 			// Backup existing ispserver ssl files
-			if(file_exists($ssl_crt_file) || is_link($ssl_crt_file))
-				rename($ssl_crt_file, $ssl_crt_file.'-temporary.bak');
-			if(file_exists($ssl_key_file) || is_link($ssl_key_file))
-				rename($ssl_key_file, $ssl_key_file.'-temporary.bak');
-			if(file_exists($ssl_pem_file) || is_link($ssl_pem_file))
-				rename($ssl_pem_file, $ssl_pem_file.'-temporary.bak');
+			if(file_exists($ssl_crt_file) || is_link($ssl_crt_file)) {
+				rename($ssl_crt_file, $ssl_crt_file . '-temporary.bak');
+			}
+			if(file_exists($ssl_key_file) || is_link($ssl_key_file)) {
+				rename($ssl_key_file, $ssl_key_file . '-temporary.bak');
+			}
+			if(file_exists($ssl_pem_file) || is_link($ssl_pem_file)) {
+				rename($ssl_pem_file, $ssl_pem_file . '-temporary.bak');
+			}
 
 			// Attempt to use Neilpang acme.sh first, as it is now the preferred LE client
 			if (is_executable($acme)) {
+				$acme_cert_dir = dirname($acme) . '/' . $hostname;
+
+				swriteln('acme.sh is installed, overriding certificate path to use ' . $acme_cert_dir);
+
+				# acme.sh does not set umask, resulting in incorrect permissions (ispconfig issue #6015)
+				$old_umask = umask(0022);
 
 				$out = null;
 				$ret = null;
@@ -3007,6 +2999,7 @@ class installer_base {
 					$acme_chain = "--fullchain-file " . escapeshellarg($ssl_crt_file);
 					exec("$acme --install-cert -d " . escapeshellarg($hostname) . " $acme_key $acme_chain");
 					$issued_successfully = true;
+					umask($old_umask);
 
 					// Make temporary backup of self-signed certs permanent
 					if(file_exists($ssl_crt_file.'-temporary.bak') || is_link($ssl_crt_file.'-temporary.bak'))
@@ -3018,6 +3011,8 @@ class installer_base {
 
 				} else {
 					swriteln('Issuing certificate via acme.sh failed. Please check that your hostname can be verified by letsencrypt');
+
+					umask($old_umask);
 
 					// Restore temporary backup of self-signed certs
 					if(file_exists($ssl_crt_file.'-temporary.bak') || is_link($ssl_crt_file.'-temporary.bak'))
@@ -3082,7 +3077,7 @@ class installer_base {
 							rename($ssl_key_file.'-temporary.bak', $ssl_key_file);
 						if(file_exists($ssl_pem_file.'-temporary.bak') || is_link($ssl_pem_file.'-temporary.bak'))
 							rename($ssl_pem_file.'-temporary.bak', $ssl_pem_file);
-						
+
 					}
 				} else {
 					swriteln('Did not find any valid acme client (acme.sh or certbot)');

@@ -63,6 +63,9 @@ class installer extends installer_base
 			$this->process_postfix_config( basename($filename, '.master') );
 		}
 
+		//* mysql-verify_recipients.cf
+		$this->process_postfix_config('mysql-verify_recipients.cf');
+
 		//* Changing mode and group of the new created config files.
 		caselog('chmod o= '.$config_dir.'/mysql-virtual_*.cf* &> /dev/null',
 			__FILE__, __LINE__, 'chmod on mysql-virtual_*.cf*', 'chmod on mysql-virtual_*.cf* failed');
@@ -157,6 +160,7 @@ class installer extends installer_base
 		touch($config_dir.'/mime_header_checks');
 		touch($config_dir.'/nested_header_checks');
 		touch($config_dir.'/body_checks');
+		touch($config_dir.'/sasl_passwd');
 
 		//* Create auxillary postfix conf files
 		$configfile = 'helo_access';
