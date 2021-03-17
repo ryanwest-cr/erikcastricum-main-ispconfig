@@ -335,7 +335,7 @@ class bind_plugin {
 			chgrp($filename, $dns_config['bind_group']);
 
 			// Store also in the db for exports.
-			$app->dbmaster->query("UPDATE `dns_soa` SET `rendered_zone`=?", $rendered_zone);
+			$app->dbmaster->query("UPDATE `dns_soa` SET `rendered_zone`=? WHERE id=?", $rendered_zone, $zone['id']);
 
 			//* Check the zonefile
 			if(is_file($filename.'.err')) unlink($filename.'.err');
