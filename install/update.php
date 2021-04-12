@@ -185,7 +185,6 @@ $conf['server_id'] = intval($conf_old["server_id"]);
 $conf['ispconfig_log_priority'] = $conf_old["log_priority"];
 
 $inst = new installer();
-if (!$inst->get_php_version()) die('ISPConfig requieres PHP '.$inst->min_php."\n");
 $inst->is_update = true;
 
 $inst->check_prerequisites();
@@ -255,6 +254,8 @@ prepareDBDump();
 
 //* initialize the database
 $inst->db = new db();
+$inst->db->setDBData($conf['mysql']["host"], $conf['mysql']["ispconfig_user"], $conf['mysql']["ispconfig_password"], $conf['mysql']["port"]);
+$inst->db->setDBName($conf['mysql']['database']);
 
 //* initialize the master DB, if we have a multiserver setup
 if($conf['mysql']['master_slave_setup'] == 'y') {
@@ -564,6 +565,9 @@ if(!$issue_asked) {
         swriteln('Certificate exists. Not creating a new one.');
     }
 }
+
+// update acme.sh if installed
+$inst->update_acme();
 
 $inst->install_ispconfig();
 
