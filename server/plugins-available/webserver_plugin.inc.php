@@ -28,6 +28,13 @@
   EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* compatibility for php < 5.5 (centos 7), remove when no longer needed */
+if(!function_exists("array_column")){
+	function array_column($array,$column_name){
+		return array_map(function($element) use($column_name){return $element[$column_name];}, $array);
+	}
+}
+
 class webserver_plugin {
 
 	var $plugin_name = 'webserver_plugin';
