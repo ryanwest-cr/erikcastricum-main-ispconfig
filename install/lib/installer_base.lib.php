@@ -1666,6 +1666,9 @@ class installer_base {
 		wf($conf['amavis']['config_dir'].'/conf.d/50-user', $content);
 		chmod($conf['amavis']['config_dir'].'/conf.d/50-user', 0640);
 
+		$config_dir = $conf['postfix']['config_dir'];
+		$quoted_config_dir = preg_quote($config_dir, '|');
+
 		$mail_config = $server_ini_array['mail'];
 		//* only change postfix config if amavisd is active filter
 		if($mail_server && $mail_config['content_filter'] === 'amavisd') {
@@ -1716,8 +1719,6 @@ class installer_base {
 				$command = "postconf -e '$cmd'";
 				caselog($command." &> /dev/null", __FILE__, __LINE__, "EXECUTED: $command", "Failed to execute the command $command");
 			}
-
-			$config_dir = $conf['postfix']['config_dir'];
 
 			// Adding amavis-services to the master.cf file if the service does not already exists
 			// (just remove the old service definitions and add them again)
@@ -1778,6 +1779,9 @@ class installer_base {
 		$server_ini_array = ini_to_array(stripslashes($server_ini_rec['config']));
 		$mail_server = ($server_ini_rec['mail_server']) ? true : false;
 		unset($server_ini_rec);
+
+		$config_dir = $conf['postfix']['config_dir'];
+		$quoted_config_dir = preg_quote($config_dir, '|');
 
 		$mail_config = $server_ini_array['mail'];
 		//* only change postfix config if rspamd is active filter
