@@ -63,7 +63,10 @@ class page_action extends tform_actions {
 			unset($app->tform->formDef["tabs"]["fastcgi"]);
 			unset($app->tform->formDef["tabs"]["vlogger"]);
 		}
-		
+		//Check if borg is installed
+		if (!$app->system->is_installed('borg')) {
+			$app->tpl->setVar('missing_utils', 'BorgBackup');
+		}
 		parent::onShow();
 	}
 

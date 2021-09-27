@@ -207,7 +207,7 @@ $form["tabs"]['server'] = array(
 			'datatype' => 'VARCHAR',
 			'formtype' => 'SELECT',
 			'default' => 'userzip',
-			'value' => array('userzip' => 'backup_mode_userzip', 'rootgz' => 'backup_mode_rootgz'),
+			'value' => array('userzip' => 'backup_mode_userzip', 'rootgz' => 'backup_mode_rootgz', 'borg' => 'backup_mode_borg_txt'),
 			'width' => '40',
 			'maxlength' => '255'
 		),

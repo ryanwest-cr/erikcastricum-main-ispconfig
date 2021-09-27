@@ -1,4 +1,9 @@
 <div class="alert alert-info"><h4 style="text-align:center"><tmpl_var name="config_for_txt"> {tmpl_var name='server_name'}</h4></div>
+            <tmpl_if name="missing_utils">
+                <div class="tab-content alert alert-warning">
+                    {tmpl_var name='backup_missing_utils_txt'} {tmpl_var name='missing_utils'}
+                </div>
+            </tmpl_if>
 
 
 
