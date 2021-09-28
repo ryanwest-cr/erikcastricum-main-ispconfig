@@ -185,6 +185,7 @@ CREATE TABLE `client` (
   `limit_spamfilter_wblist` int(11) NOT NULL DEFAULT '0',
   `limit_spamfilter_user` int(11) NOT NULL DEFAULT '0',
   `limit_spamfilter_policy` int(11) NOT NULL DEFAULT '0',
+  `limit_mail_backup` ENUM( 'n', 'y' ) NOT NULL DEFAULT 'y',
   `limit_relayhost` ENUM( 'n', 'y' ) NOT NULL DEFAULT 'n',
   `default_xmppserver` int(11) unsigned NOT NULL DEFAULT '1',
   `xmpp_servers` text,
@@ -318,6 +319,7 @@ CREATE TABLE `client_template` (
   `limit_spamfilter_wblist` int(11) NOT NULL default '0',
   `limit_spamfilter_user` int(11) NOT NULL default '0',
   `limit_spamfilter_policy` int(11) NOT NULL default '0',
+  `limit_mail_backup` ENUM( 'n', 'y' ) NOT NULL DEFAULT 'y',
   `limit_relayhost` ENUM( 'n', 'y' ) NOT NULL DEFAULT 'n',
   `default_xmppserver` int(11) unsigned NOT NULL DEFAULT '1',
   `xmpp_servers` text,
@@ -916,7 +918,7 @@ CREATE TABLE `mail_forwarding` (
   `allow_send_as` ENUM('n','y') NOT NULL DEFAULT 'n',
   `greylisting` enum('n','y' ) NOT NULL DEFAULT 'n',
   PRIMARY KEY  (`forwarding_id`),
-  KEY `server_id` (`server_id`,`source`),
+  KEY `server_id` (`server_id`, `source`),
   KEY `type` (`type`)
 ) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
@@ -1021,7 +1023,7 @@ CREATE TABLE `mail_transport` (
   `active` enum('n','y') NOT NULL DEFAULT 'n',
   PRIMARY KEY  (`transport_id`),
   KEY `server_id` (`server_id`,`transport`),
-  KEY `server_id_2` (`server_id`,`domain`)
+  UNIQUE KEY `server_id_2` (`server_id`, `domain`)
 ) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
 -- --------------------------------------------------------
@@ -1545,7 +1547,7 @@ CREATE TABLE `spamfilter_users` (
   `sys_perm_other` varchar(5) NOT NULL DEFAULT '',
   `server_id` int(11) unsigned NOT NULL DEFAULT '0',
   `priority` tinyint(3) unsigned NOT NULL default '7',
-  `policy_id` int(11) unsigned NOT NULL default '1',
+  `policy_id` int(11) unsigned NOT NULL default '0',
   `email` varchar(255) NOT NULL DEFAULT '',
   `fullname` varchar(64) default NULL,
   `local` varchar(1) default NULL,

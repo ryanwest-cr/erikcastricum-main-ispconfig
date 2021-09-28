@@ -1861,7 +1861,7 @@ class installer_base {
 		# local.d templates with template tags
 		# note: ensure these template files are in server/conf/ and symlinked in install/tpl/
 		$local_d = array(
-			'dkim_signing.conf',
+			'dkim_signing.conf',	# dkim_signing.conf no longer uses template tags, could move below
 			'options.inc',
 			'redis.conf',
 			'classifier-bayes.conf',
@@ -1897,6 +1897,7 @@ class installer_base {
 			'neural_group.conf',
 			'users.conf',
 			'groups.conf',
+			'arc.conf',
 		);
 		foreach ($local_d as $f) {
 			if(file_exists($conf['ispconfig_install_dir']."/server/conf-custom/install/rspamd_${f}.master")) {
@@ -2894,8 +2895,13 @@ class installer_base {
 				$check_acme_file = $acme_cert_dir . '/cert.pem';
 			}
 		}
-
 		swriteln('Using certificate path ' . $acme_cert_dir);
+
+		if(!is_dir($conf['ispconfig_log_dir'])) {
+			mkdir($conf['ispconfig_log_dir'], 0755, true);
+		}
+		$acme_log = $conf['ispconfig_log_dir'] . '/acme.log';
+
 		$ip_address_match = false;
 		if(!(($svr_ip4 && in_array($svr_ip4, $dns_ips)) || ($svr_ip6 && in_array($svr_ip6, $dns_ips)))) {
 			swriteln('Server\'s public ip(s) (' . $svr_ip4 . ($svr_ip6 ? ', ' . $svr_ip6 : '') . ') not found in A/AAAA records for ' . $hostname . ': ' . implode(', ', $dns_ips));
@@ -2917,16 +2923,25 @@ class installer_base {
 			// This script is needed earlier to check and open http port 80 or standalone might fail
 			// Make executable and temporary symlink latest letsencrypt pre, post and renew hook script before install
 			if(file_exists(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_pre_hook.sh') && !file_exists('/usr/local/bin/letsencrypt_pre_hook.sh')) {
+				if(is_link('/usr/local/bin/letsencrypt_pre_hook.sh')) {
+					unlink('/usr/local/bin/letsencrypt_pre_hook.sh');
+				}
 				symlink(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_pre_hook.sh', '/usr/local/bin/letsencrypt_pre_hook.sh');
 				chown('/usr/local/bin/letsencrypt_pre_hook.sh', 'root');
 				chmod('/usr/local/bin/letsencrypt_pre_hook.sh', 0700);
 			}
 			if(file_exists(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_post_hook.sh') && !file_exists('/usr/local/bin/letsencrypt_post_hook.sh')) {
+				if(is_link('/usr/local/bin/letsencrypt_post_hook.sh')) {
+					unlink('/usr/local/bin/letsencrypt_post_hook.sh');
+				}
 				symlink(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_post_hook.sh', '/usr/local/bin/letsencrypt_post_hook.sh');
 				chown('/usr/local/bin/letsencrypt_post_hook.sh', 'root');
 				chmod('/usr/local/bin/letsencrypt_post_hook.sh', 0700);
 			}
 			if(file_exists(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_renew_hook.sh') && !file_exists('/usr/local/bin/letsencrypt_renew_hook.sh')) {
+				if(is_link('/usr/local/bin/letsencrypt_renew_hook.sh')) {
+					unlink('/usr/local/bin/letsencrypt_renew_hook.sh');
+				}
 				symlink(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_renew_hook.sh', '/usr/local/bin/letsencrypt_renew_hook.sh');
 				chown('/usr/local/bin/letsencrypt_renew_hook.sh', 'root');
 				chmod('/usr/local/bin/letsencrypt_renew_hook.sh', 0700);
@@ -3002,13 +3017,13 @@ class installer_base {
 
 			// Backup existing ispserver ssl files
 			if(file_exists($ssl_crt_file) || is_link($ssl_crt_file)) {
-				rename($ssl_crt_file, $ssl_crt_file . '-temporary.bak');
+				copy($ssl_crt_file, $ssl_crt_file . '-temporary.bak');
 			}
 			if(file_exists($ssl_key_file) || is_link($ssl_key_file)) {
-				rename($ssl_key_file, $ssl_key_file . '-temporary.bak');
+				copy($ssl_key_file, $ssl_key_file . '-temporary.bak');
 			}
 			if(file_exists($ssl_pem_file) || is_link($ssl_pem_file)) {
-				rename($ssl_pem_file, $ssl_pem_file . '-temporary.bak');
+				copy($ssl_pem_file, $ssl_pem_file . '-temporary.bak');
 			}
 
 			// Attempt to use Neilpang acme.sh first, as it is now the preferred LE client
@@ -3020,14 +3035,17 @@ class installer_base {
 				# acme.sh does not set umask, resulting in incorrect permissions (ispconfig issue #6015)
 				$old_umask = umask(0022);
 
+				// Switch from zerossl to letsencrypt CA
+				exec("$acme --set-default-ca  --server  letsencrypt");
+
 				$out = null;
 				$ret = null;
 				if($conf['nginx']['installed'] == true || $conf['apache']['installed'] == true) {
-					exec("$acme --issue -w /usr/local/ispconfig/interface/acme -d " . escapeshellarg($hostname) . " $renew_hook", $out, $ret);
+					exec("$acme --issue --log $acme_log -w /usr/local/ispconfig/interface/acme -d " . escapeshellarg($hostname) . " $renew_hook", $out, $ret);
 				}
 				// Else, it is not webserver, so we use standalone
 				else {
-					exec("$acme --issue --standalone -d " . escapeshellarg($hostname) . " $hook", $out, $ret);
+					exec("$acme --issue --log $acme_log --standalone -d " . escapeshellarg($hostname) . " $hook", $out, $ret);
 				}
 
 				if($ret == 0 || ($ret == 2 && file_exists($check_acme_file))) {
@@ -3039,7 +3057,7 @@ class installer_base {
 					//$acme_cert = "--cert-file $acme_cert_dir/cert.pem";
 					$acme_key = "--key-file " . escapeshellarg($ssl_key_file);
 					$acme_chain = "--fullchain-file " . escapeshellarg($ssl_crt_file);
-					exec("$acme --install-cert -d " . escapeshellarg($hostname) . " $acme_key $acme_chain");
+					exec("$acme --install-cert --log $acme_log -d " . escapeshellarg($hostname) . " $acme_key $acme_chain");
 					$issued_successfully = true;
 					umask($old_umask);
 
