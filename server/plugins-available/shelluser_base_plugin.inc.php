@@ -168,6 +168,11 @@ class shelluser_base_plugin {
 				$app->system->chown($homedir.'/.profile', $data['new']['username']);
 				$app->system->chgrp($homedir.'/.profile', $data['new']['pgroup']);
 
+				// Create symlinks for conveniance, SFTP user should not land in an empty dir.
+				symlink('../../web', $homedir.'/web');
+				symlink('../../log', $homedir.'/log');
+				symlink('../../private', $homedir.'/private');
+
 				//* Disable shell user temporarily if we use jailkit
 				if($data['new']['chroot'] == 'jailkit') {
 					$command = 'usermod -s /bin/false -L ? 2>/dev/null';
