@@ -32,8 +32,9 @@ try {
         $ns1 = 'ns1.testhoster.tld';
         $ns2 = 'ns2.testhoster.tld';
         $email = 'email.test.tld';
+        $ipv6 = '2606:2800:220:1:248:1893:25c8:1946';
 
-        $id = $client->dns_templatezone_add($session_id, $client_id, $template_id, $domain, $ip, $ns1, $ns2, $email);
+        $id = $client->dns_templatezone_add($session_id, $client_id, $template_id, $domain, $ip, $ns1, $ns2, $email, $ipv6);
 
         echo "ID: ".$id."<br>";
 
