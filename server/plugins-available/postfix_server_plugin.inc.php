@@ -138,7 +138,7 @@ class postfix_server_plugin {
 				if ($value == '') continue;
 				if (preg_match('/^reject_rbl_client/', $value)) continue;
 				$new_options[] = $value;
-				if (preg_match('/^permit_mynetworks/', $value)) {
+				if (preg_match('/^permit_sasl_authenticated/', $value)) {
 					$new_options = array_merge($new_options, $rbl_options);
 					$rbl_options = array(); // so we don't ever array_merge twice
 				}
