@@ -91,7 +91,7 @@ class remoting {
 		$sql = "SELECT * FROM `attempts_login` WHERE `ip`= ? AND  `login_time` > (NOW() - INTERVAL 5 MINUTE) LIMIT 1";
 		$alreadyfailed = $app->db->queryOneRecord($sql, $ip_md5);
 
-		if($alreadyfailed['times'] > 10) {
+		if($alreadyfailed['times'] >= 10) {
 			throw new SoapFault('login_failure_limit', 'The login failure limit has been reached.');
 			return false;
 		}
@@ -121,7 +121,7 @@ class remoting {
 					$app->db->query($sql, $ip_md5);
 				} elseif($alreadyfailed['times'] >= 1) {
 					//* update times wrong
-					$sql = "UPDATE `attempts_login` SET `times`=`times`+1, `login_time`=NOW() WHERE `ip` = ? AND `login_time` < NOW() ORDER BY `login_time` DESC LIMIT 1";
+					$sql = "UPDATE `attempts_login` SET `times`=`times`+1, `login_time`=NOW() WHERE `ip` = ? ORDER BY `login_time` DESC LIMIT 1";
 					$app->db->query($sql, $ip_md5);
 				}
 				throw new SoapFault('client_login_failed', 'The login failed. Username or password wrong.');
@@ -233,7 +233,7 @@ class remoting {
 					$app->db->query($sql, $ip_md5);
 				} elseif($alreadyfailed['times'] >= 1) {
 					//* update times wrong
-					$sql = "UPDATE `attempts_login` SET `times`=`times`+1, `login_time`=NOW() WHERE `ip` = ? AND `login_time` < NOW() ORDER BY `login_time` DESC LIMIT 1";
+					$sql = "UPDATE `attempts_login` SET `times`=`times`+1, `login_time`=NOW() WHERE `ip` = ? ORDER BY `login_time` DESC LIMIT 1";
 					$app->db->query($sql, $ip_md5);
 				}
 				
@@ -575,7 +575,7 @@ class remoting {
 		$sql = "SELECT * FROM `attempts_login` WHERE `ip`= ? AND  `login_time` > (NOW() - INTERVAL 5 MINUTE) LIMIT 1";
 		$alreadyfailed = $app->db->queryOneRecord($sql, $ip_md5);
 
-		if($alreadyfailed['times'] > 10) {
+		if($alreadyfailed['times'] >= 10) {
 			throw new SoapFault('session_failure_limit', 'The Session failure limit has been reached.');
 			return false;
 		}
@@ -591,7 +591,7 @@ class remoting {
 					$app->db->query($sql, $ip_md5);
 				} elseif($alreadyfailed['times'] >= 1) {
 					//* update times wrong
-					$sql = "UPDATE `attempts_login` SET `times`=`times`+1, `login_time`=NOW() WHERE `ip` = ? AND `login_time` < NOW() ORDER BY `login_time` DESC LIMIT 1";
+					$sql = "UPDATE `attempts_login` SET `times`=`times`+1, `login_time`=NOW() WHERE `ip` = ? ORDER BY `login_time` DESC LIMIT 1";
 					$app->db->query($sql, $ip_md5);
 				}
 			
