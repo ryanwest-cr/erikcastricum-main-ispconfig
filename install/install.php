@@ -146,7 +146,6 @@ include_once 'dist/conf/'.$dist['confid'].'.conf.php';
 //** Installer Interface
 //****************************************************************************************************
 $inst = new installer();
-if (!$inst->get_php_version()) die('ISPConfig requires PHP '.$inst->min_php."\n");
 $retval=shell_exec("which which");
 if (empty($retval)) die ("ISPConfig requires which \n");
 
@@ -161,8 +160,13 @@ if(!is_writable(dirname(ISPC_LOG_FILE))){
 	die("ERROR: Cannot write to the ".dirname(ISPC_LOG_FILE)." directory. Are you root or sudo ?\n\n");
 }
 
+//** Check for ISPConfig 2.x versions
 if(is_dir('/root/ispconfig') || is_dir('/home/admispconfig')) {
-	die('This software cannot be installed on a server wich runs ISPConfig 2.x.');
+	if(is_dir('/home/admispconfig')) {
+		die('This software cannot be installed on a server which runs ISPConfig 2.x.');
+	} else {
+		die('This software cannot be installed on a server which runs ISPConfig 2.x; the presence of the /root/ispconfig/ directory may indicate an ISPConfig 2.x installation, otherwise you can remove or rename it to continue.');
+	}
 }
 
 if(is_dir('/usr/local/ispconfig')) {
@@ -597,6 +601,9 @@ if(!$issue_asked) {
         swriteln('Certificate exists. Not creating a new one.');
     }
 }
+
+// update acme.sh if installed
+$inst->update_acme();
 
 if($conf['services']['web'] == true) {
 	//** Configure apps vhost

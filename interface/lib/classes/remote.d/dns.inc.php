@@ -46,7 +46,6 @@ class remoting_dns extends remoting {
 		global $app, $conf;
 		if(!$this->checkPerm($session_id, 'dns_templatezone_add')) {
 			throw new SoapFault('permission_denied', 'You do not have the permissions to access this function.');
-			return false;
 		}
 
 		$client = $app->db->queryOneRecord("SELECT default_dnsserver FROM client WHERE client_id = ?", $client_id);
@@ -249,7 +248,7 @@ class remoting_dns extends remoting {
 			return false;
 		}
 
-		if(!preg_match('/^[\w\.\-]{2,64}\.[a-zA-Z0-9\-]{2,63}$/', $origin)){
+		if(!preg_match('/^[\w\.\-]{1,64}\.[a-zA-Z0-9\-]{2,63}$/', $origin)){
 			throw new SoapFault('no_domain_found', 'Invalid domain name.');
 			return false;
 		}
@@ -512,6 +511,29 @@ class remoting_dns extends remoting {
 	//* Delete a record
 	public function dns_hinfo_delete($session_id, $primary_id, $update_serial=false) {
 		return $this->dns_rr_delete($session_id, $primary_id, $update_serial, 'HINFO');
+	}
+
+
+	// ----------------------------------------------------------------------------------------------------------------
+
+	//* Get record details
+	public function dns_loc_get($session_id, $primary_id) {
+		return $this->dns_rr_get($session_id, $primary_id, 'LOC');
+	}
+
+	//* Add a record
+	public function dns_loc_add($session_id, $client_id, $params, $update_serial=false) {
+		return $this->dns_rr_add($session_id, $client_id, $params, $update_serial, 'LOC');
+	}
+
+	//* Update a record
+	public function dns_loc_update($session_id, $client_id, $primary_id, $params, $update_serial=false) {
+		return $this->dns_rr_update($session_id, $client_id, $primary_id, $params, $update_serial, 'LOC');
+	}
+
+	//* Delete a record
+	public function dns_loc_delete($session_id, $primary_id, $update_serial=false) {
+		return $this->dns_rr_delete($session_id, $primary_id, $update_serial, 'LOC');
 	}
 
 	// ----------------------------------------------------------------------------------------------------------------
