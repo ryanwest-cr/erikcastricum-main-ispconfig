@@ -26,7 +26,7 @@ Development branch: [![pipeline status](https://git.ispconfig.org/ispconfig/ispc
 [^1]: not actively tested
 
 ## Supported operating systems
-- Debian 9, 11, and testing
+- Debian 9 - 11, and testing
 - Ubuntu 16.04 - 20.04
 - CentOS 7 and 8
 

@@ -242,15 +242,20 @@ class web_module {
 				return $retval;
 			}
 		}
-
-		exec($cmd.' 2>&1', $retval['output'], $retval['retval']);
+		
+		$app->log("Restarting httpd: $cmd", LOGLEVEL_DEBUG);
+		
+		if($cmd != '') {
+			exec($cmd.' 2>&1', $retval['output'], $retval['retval']);
+		} else {
+			$app->log('We got no init command, restart or reload of service aborted.',LOGLEVEL_WARN);
+		}
 
 		// if restart failed despite successful syntax check => try again
 		if($web_config['server_type'] == 'nginx' && $retval['retval'] > 0){
 			sleep(2);
 			exec($cmd.' 2>&1', $retval['output'], $retval['retval']);
 		}
-		$app->log("Restarting httpd: $cmd", LOGLEVEL_DEBUG);
 
 		// nginx: do a syntax check because on some distributions, the init script always returns 0 - even if the syntax is not ok (how stupid is that?)
 		//if($web_config['server_type'] == 'nginx' && $retval['retval'] == 0){
@@ -307,10 +312,16 @@ class web_module {
 			}
                         */
 		}
-
-		$retval = array('output' => '', 'retval' => 0);
-		exec($initcommand.' 2>&1', $retval['output'], $retval['retval']);
+		
 		$app->log("Restarting php-fpm: $initcommand", LOGLEVEL_DEBUG);
+		
+		if($initcommand != '') {
+			$retval = array('output' => '', 'retval' => 0);
+			exec($initcommand.' 2>&1', $retval['output'], $retval['retval']);
+		} else {
+			$app->log('We got no init command, restart or reload of php-fpm service aborted.',LOGLEVEL_WARN);
+		}
+		
 		return $retval;
 	}
 
