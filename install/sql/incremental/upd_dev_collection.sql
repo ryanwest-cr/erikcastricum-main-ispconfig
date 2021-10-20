@@ -1,0 +1,1 @@
+ALTER TABLE `remote_session` ADD `remote_ip` VARCHAR(39) NOT NULL DEFAULT '' AFTER `tstamp`;

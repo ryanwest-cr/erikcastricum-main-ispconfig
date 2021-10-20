@@ -1317,6 +1317,7 @@ CREATE TABLE `remote_session` (
   `remote_functions` text,
   `client_login` tinyint(1) unsigned NOT NULL default '0',
   `tstamp` int(10) unsigned NOT NULL DEFAULT '0',
+  `remote_ip` varchar(39) NOT NULL DEFAULT '',
   PRIMARY KEY  (`remote_session`)
 ) DEFAULT CHARSET=utf8 ;
 
