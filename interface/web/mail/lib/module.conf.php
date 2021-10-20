@@ -61,7 +61,7 @@ if($app->auth->get_client_limit($userid, 'mailcatchall') != 0)
 		'html_id' => 'mail_domain_catchall_list');
 }
 
-if(! $app->auth->is_admin())
+if(! $app->auth->is_admin() && $app->auth->get_client_limit($userid, 'mail_wblist') != 0)
 {
 	$items[] = array(   'title'  => 'Email Whitelist',
 		'target'  => 'content',
