@@ -70,9 +70,9 @@ class session {
 	function read ($session_id) {
 		
 		if($this->timeout > 0) {
-			$rec = $this->db->queryOneRecord("SELECT * FROM sys_session WHERE session_id = ? AND (`permanent` = 'y' OR last_updated >= DATE_SUB(NOW(), INTERVAL ? MINUTE))", $session_id, $this->timeout);
+			$rec = $this->db->queryOneRecord("SELECT * FROM sys_session WHERE session_id = ? AND (`permanent` = 'y' OR last_updated >= DATE_SUB(NOW(), INTERVAL ? MINUTE))", (string)$session_id, $this->timeout);
 		} else {
-			$rec = $this->db->queryOneRecord("SELECT * FROM sys_session WHERE session_id = ?", $session_id);
+			$rec = $this->db->queryOneRecord("SELECT * FROM sys_session WHERE session_id = ?", (string)$session_id);
 		}
 
 		if (is_array($rec)) {
@@ -91,18 +91,18 @@ class session {
 
 		// Dont write session_data to DB if session data has not been changed after reading it.
 		if(isset($this->session_array['session_data']) && $this->session_array['session_data'] != '' && $this->session_array['session_data'] == $session_data) {
-			$this->db->query("UPDATE sys_session SET last_updated = NOW() WHERE session_id = ?", $session_id);
+			$this->db->query("UPDATE sys_session SET last_updated = NOW() WHERE session_id = ?", (string)$session_id);
 			return true;
 		}
 
 
 		if (@$this->session_array['session_id'] == '') {
 			$sql = "REPLACE INTO sys_session (session_id,date_created,last_updated,session_data,permanent) VALUES (?,NOW(),NOW(),?,?)";
-			$this->db->query($sql, $session_id, $session_data, ($this->permanent ? 'y' : 'n'));
+			$this->db->query($sql, (string)$session_id, $session_data, ($this->permanent ? 'y' : 'n'));
 
 		} else {
 			$sql = "UPDATE sys_session SET last_updated = NOW(), session_data = ?" . ($this->permanent ? ", `permanent` = 'y'" : "") . " WHERE session_id = ?";
-			$this->db->query($sql, $session_data, $session_id);
+			$this->db->query($sql, $session_data, (string)$session_id);
 
 		}
 
@@ -112,7 +112,7 @@ class session {
 	function destroy ($session_id) {
 
 		$sql = "DELETE FROM sys_session WHERE session_id = ?";
-		$this->db->query($sql, $session_id);
+		$this->db->query($sql, (string)$session_id);
 
 		return true;
 	}

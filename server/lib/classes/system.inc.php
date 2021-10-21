@@ -1371,6 +1371,7 @@ class system{
 	 * Control services to restart etc
 	 *
 	 */
+	 /*
 	function daemon_init($daemon, $action){
 		//* $action = start|stop|restart|reload
 		global $app;
@@ -1409,7 +1410,7 @@ class system{
 				}
 			}
 		}
-	}
+	} */
 
 	function netmask($netmask){
 		list($f1, $f2, $f3, $f4) = explode('.', trim($netmask));
@@ -2064,36 +2065,103 @@ class system{
 	}
 
 	function _getinitcommand($servicename, $action, $init_script_directory = '', $check_service) {
-		global $conf;
+		global $conf, $app;
+		
 		// upstart
+		/* removed upstart support - deprecated
 		if(is_executable('/sbin/initctl')){
 			exec('/sbin/initctl version 2>/dev/null | /bin/grep -q upstart', $retval['output'], $retval['retval']);
 			if(intval($retval['retval']) == 0) return 'service '.$servicename.' '.$action;
 		}
-
-		// systemd
-		if(is_executable('/bin/systemd') || is_executable('/usr/bin/systemctl')){
-			if ($check_service) {
-				$this->exec_safe("systemctl is-enabled ? 2>&1", $servicename);
-				$ret_val = $this->last_exec_retcode();
-			}
-			if ($ret_val == 0 || !$check_service) {
-				return 'systemctl '.$action.' '.$servicename.'.service';
-			}
+		*/
+		
+		if(!in_array($action,array('restart','reload','force-reload'))) {
+			$app->log('Invalid init command action '.$action,LOGLEVEL_WARN);
+			return false;
 		}
 
-		// sysvinit
+		//* systemd (now default in all supported OS)
+		if(is_executable('/bin/systemd') || is_executable('/usr/bin/systemctl')){
+			$app->log('Trying to use Systemd to restart service',LOGLEVEL_DEBUG);
+			
+			//* Test service name via regex
+			if(preg_match('/[a-zA-Z0-9\.\-\_]/',$servicename)) {
+			
+				//* Test if systemd service is enabled
+				if ($check_service) {
+					$this->exec_safe("systemctl is-enabled ? 2>&1", $servicename);
+					$ret_val = $this->last_exec_retcode();
+				} else {
+					$app->log('Systemd service '.$servicename.' not found or not enabled.',LOGLEVEL_DEBUG);
+				}
+			
+				//* Return service command
+				if ($ret_val == 0 || !$check_service) {
+					return 'systemctl '.$action.' '.$servicename.'.service';
+				} else {
+					$app->log('Failed to use Systemd to restart service '.$servicename.', we try init script instead.',LOGLEVEL_DEBUG);
+				}
+			} else {
+				$app->log('Systemd service name contains invalid chars: '.$servicename,LOGLEVEL_DEBUG);
+			}
+		} else {
+			$app->log('Not using Systemd to restart services',LOGLEVEL_DEBUG);
+		}
+
+		//* sysvinit fallback
+		$app->log('Using init script to restart service',LOGLEVEL_DEBUG);
+		
+		//* Get init script directory
 		if($init_script_directory == '') $init_script_directory = $conf['init_scripts'];
 		if(substr($init_script_directory, -1) === '/') $init_script_directory = substr($init_script_directory, 0, -1);
-		if($check_service && is_executable($init_script_directory.'/'.$servicename)) {
-			return $init_script_directory.'/'.$servicename.' '.$action;
+		$init_script_directory = realpath($init_script_directory);
+		
+		//* Check init script dir
+		if(!is_dir($init_script_directory)) {
+			$app->log('Init script directory '.$init_script_directory.' not found',LOGLEVEL_WARN);
+			return false;
+		}
+		
+		//* Forbidden init script paths
+		if(substr($init_script_directory,0,4) == '/var' || substr($init_script_directory,0,4) == '/tmp') {
+			$app->log('Do not put init scripts in /var or /tmp folder.',LOGLEVEL_WARN);
+			return false;
+		}
+		
+		//* Check init script dir owner
+		if(fileowner($init_script_directory) !== 0) {
+			$app->log('Init script directory '.$init_script_directory.' not owned by root user',LOGLEVEL_WARN);
+			return false;
+		}
+		
+		$full_init_script_path = realpath($init_script_directory.'/'.$servicename);
+		
+		if($full_init_script_path == '') {
+			$app->log('No init script, we quit here.',LOGLEVEL_WARN);
+			return false;
+		}
+		
+		//* Check init script
+		if(!is_file($full_init_script_path)) {
+			$app->log('Init script '.$full_init_script_path.' not found',LOGLEVEL_WARN);
+			return false;
+		}
+		
+		//* Check init script owner
+		if(fileowner($full_init_script_path) !== 0) {
+			$app->log('Init script '.$full_init_script_path.' not owned by root user',LOGLEVEL_WARN);
+			return false;
+		}
+		
+		if($check_service && is_executable($full_init_script_path)) {
+			return $full_init_script_path.' '.$action;
 		}
 		if (!$check_service) {
-			return $init_script_directory.'/'.$servicename.' '.$action;
+			return $full_init_script_path.' '.$action;
 		}
 	}
 
-	function getinitcommand($servicename, $action, $init_script_directory = '', $check_service=false) {
+	function getinitcommand($servicename, $action, $init_script_directory = '', $check_service=true) {
 		if (is_array($servicename)) {
 			foreach($servicename as $service) {
 				$out = $this->_getinitcommand($service, $action, $init_script_directory, true);

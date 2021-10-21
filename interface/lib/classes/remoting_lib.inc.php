@@ -232,7 +232,7 @@ class remoting_lib extends tform_base {
 		if(@is_numeric($primary_id)) {
 			if($primary_id > 0) {
 				// Return a single record
-				return parent::getDataRecord($primary_id);
+				return parent::getDataRecord(intval($primary_id));
 			} elseif($primary_id == -1) {
 				// Return a array with all records
 				$sql = "SELECT * FROM ??";
@@ -255,8 +255,8 @@ class remoting_lib extends tform_base {
 				} else {
 					$sql_where .= "?? = ? AND ";
 				}
-				$params[] = $key;
-				$params[] = $val;
+				$params[] = (string)$key;
+				$params[] = (string)$val;
 			}
 			$sql_where = substr($sql_where, 0, -5);
 			if($sql_where == '') $sql_where = '1';

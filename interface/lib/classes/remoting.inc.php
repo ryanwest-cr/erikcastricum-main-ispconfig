@@ -85,10 +85,20 @@ class remoting {
 		//* Delete old remoting sessions
 		$sql = "DELETE FROM remote_session WHERE tstamp < UNIX_TIMESTAMP()";
 		$app->db->query($sql);
+		
+		//* Check for max. login attempts
+		$ip_md5 = md5($_SERVER['REMOTE_ADDR']);
+		$sql = "SELECT * FROM `attempts_login` WHERE `ip`= ? AND  `login_time` > (NOW() - INTERVAL 5 MINUTE) LIMIT 1";
+		$alreadyfailed = $app->db->queryOneRecord($sql, $ip_md5);
+
+		if($alreadyfailed['times'] >= 10) {
+			throw new SoapFault('login_failure_limit', 'The login failure limit has been reached.');
+			return false;
+		}
 
 		if($client_login == true) {
 			$sql = "SELECT * FROM sys_user WHERE USERNAME = ?";
-			$user = $app->db->queryOneRecord($sql, $username);
+			$user = $app->db->queryOneRecord($sql, (string)$username);
 			if($user) {
 				$saved_password = stripslashes($user['passwort']);
 
@@ -104,6 +114,16 @@ class remoting {
 					}
 				}
 			} else {
+				if(!$alreadyfailed['times'] )
+				{
+					//* user login the first time wrong
+					$sql = "INSERT INTO `attempts_login` (`ip`, `times`, `login_time`) VALUES (?, 1, NOW())";
+					$app->db->query($sql, $ip_md5);
+				} elseif($alreadyfailed['times'] >= 1) {
+					//* update times wrong
+					$sql = "UPDATE `attempts_login` SET `times`=`times`+1, `login_time`=NOW() WHERE `ip` = ? ORDER BY `login_time` DESC LIMIT 1";
+					$app->db->query($sql, $ip_md5);
+				}
 				throw new SoapFault('client_login_failed', 'The login failed. Username or password wrong.');
 			}
 			if($user['active'] != 1) {
@@ -119,17 +139,23 @@ class remoting {
 
 			//* Create a remote user session
 			//srand ((double)microtime()*1000000);
-			$remote_session = md5(mt_rand().uniqid('ispco'));
+			$remote_session = substr(str_shuffle('abcdefghijklmnopqrstuvwxyz'),0,1).sha1(mt_rand().uniqid('ispco',true));
 			$remote_userid = $user['userid'];
 			$remote_functions = '';
 			$tstamp = time() + $this->session_timeout;
-			$sql = 'INSERT INTO remote_session (remote_session,remote_userid,remote_functions,client_login,tstamp'
-				.') VALUES (?, ?, ?, 1, ?)';
-			$app->db->query($sql, $remote_session,$remote_userid,$remote_functions,$tstamp);
+			$ip = $_SERVER['REMOTE_ADDR'];
+			$sql = 'INSERT INTO remote_session (remote_session,remote_userid,remote_functions,client_login,tstamp,remote_ip'
+				.') VALUES (?, ?, ?, 1, ?, ?)';
+			$app->db->query($sql, $remote_session,$remote_userid,$remote_functions,$tstamp,$ip);
+			
+			//* Delete login attempts after successful login
+			$sql = "DELETE FROM `attempts_login` WHERE `ip`=?";
+			$app->db->query($sql, $ip_md5);
+			
 			return $remote_session;
 		} else {
 			$sql = "SELECT * FROM remote_user WHERE remote_username = ?";
-			$remote_user = $app->db->queryOneRecord($sql, $username);
+			$remote_user = $app->db->queryOneRecord($sql, (string)$username);
 			if($remote_user) {
 				if(substr($remote_user['remote_password'], 0, 1) === '$') {
 					if(crypt(stripslashes($password), $remote_user['remote_password']) != $remote_user['remote_password']) {
@@ -138,7 +164,7 @@ class remoting {
 				} elseif(md5($password) == $remote_user['remote_password']) {
 					// update hash algo
 					$sql = 'UPDATE `remote_user` SET `remote_password` = ? WHERE `remote_username` = ?';
-					$app->db->query($sql, $app->auth->crypt_password($password), $username);
+					$app->db->query($sql, $app->auth->crypt_password($password), (string)$username);
 				} else {
 					$remote_user = null;
 				}
@@ -185,15 +211,32 @@ class remoting {
 				}
 				//* Create a remote user session
 				//srand ((double)microtime()*1000000);
-				$remote_session = md5(mt_rand().uniqid('ispco'));
+				$remote_session = substr(str_shuffle('abcdefghijklmnopqrstuvwxyz'),0,1).sha1(mt_rand().uniqid('ispco',true));
 				$remote_userid = $remote_user['remote_userid'];
 				$remote_functions = $remote_user['remote_functions'];
 				$tstamp = time() + $this->session_timeout;
-				$sql = 'INSERT INTO remote_session (remote_session,remote_userid,remote_functions,tstamp'
-					.') VALUES (?, ?, ?, ?)';
-				$app->db->query($sql, $remote_session,$remote_userid,$remote_functions,$tstamp);
+				$sql = 'INSERT INTO remote_session (remote_session,remote_userid,remote_functions,tstamp,remote_ip'
+					.') VALUES (?, ?, ?, ?, ?)';
+				$app->db->query($sql, $remote_session,$remote_userid,$remote_functions,$tstamp, $ip);
+				
+				//* Delete login attempts after successful login
+				$sql = "DELETE FROM `attempts_login` WHERE `ip`=?";
+				$app->db->query($sql, $ip_md5);
+				
 				return $remote_session;
 			} else {
+				
+				if(!$alreadyfailed['times'] )
+				{
+					//* user login the first time wrong
+					$sql = "INSERT INTO `attempts_login` (`ip`, `times`, `login_time`) VALUES (?, 1, NOW())";
+					$app->db->query($sql, $ip_md5);
+				} elseif($alreadyfailed['times'] >= 1) {
+					//* update times wrong
+					$sql = "UPDATE `attempts_login` SET `times`=`times`+1, `login_time`=NOW() WHERE `ip` = ? ORDER BY `login_time` DESC LIMIT 1";
+					$app->db->query($sql, $ip_md5);
+				}
+				
 				throw new SoapFault('login_failed', 'The login failed. Username or password wrong.');
 				return false;
 			}
@@ -212,7 +255,7 @@ class remoting {
 		}
 
 		$sql = "DELETE FROM remote_session WHERE remote_session = ?";
-		if($app->db->query($sql, $session_id) != false) {
+		if($app->db->query($sql, (string)$session_id) != false) {
 			return true;
 		} else {
 			return false;
@@ -522,12 +565,61 @@ class remoting {
 			throw new SoapFault('session_id_empty', 'The SessionID is empty.');
 			return false;
 		}
+		
+		if(!is_string($session_id)) {
+			throw new SoapFault('session_id_nostring', 'Wrong SessionID datatype.');
+			return false;
+		}
+		
+		$ip_md5 = md5($_SERVER['REMOTE_ADDR']);
+		$sql = "SELECT * FROM `attempts_login` WHERE `ip`= ? AND  `login_time` > (NOW() - INTERVAL 5 MINUTE) LIMIT 1";
+		$alreadyfailed = $app->db->queryOneRecord($sql, $ip_md5);
+
+		if($alreadyfailed['times'] >= 10) {
+			throw new SoapFault('session_failure_limit', 'The Session failure limit has been reached.');
+			return false;
+		}
 
 		$sql = "SELECT * FROM remote_session WHERE remote_session = ? AND tstamp >= UNIX_TIMESTAMP()";
-		$session = $app->db->queryOneRecord($sql, $session_id);
+		$session = $app->db->queryOneRecord($sql, (string)$session_id);
+		
+		if(!is_array($session)) {
+			if(!$alreadyfailed['times'] )
+				{
+					//* user login the first time wrong
+					$sql = "INSERT INTO `attempts_login` (`ip`, `times`, `login_time`) VALUES (?, 1, NOW())";
+					$app->db->query($sql, $ip_md5);
+				} elseif($alreadyfailed['times'] >= 1) {
+					//* update times wrong
+					$sql = "UPDATE `attempts_login` SET `times`=`times`+1, `login_time`=NOW() WHERE `ip` = ? ORDER BY `login_time` DESC LIMIT 1";
+					$app->db->query($sql, $ip_md5);
+				}
+			
+			throw new SoapFault('session_does_not_exist', 'The Session is expired or does not exist.');
+			return false;
+		}
+		
+		$ip = $_SERVER['REMOTE_ADDR'];
+		if($session['remote_ip'] != $ip) {
+			throw new SoapFault('session_ip_mismatch', 'Session IP mismatch.');
+			return false;
+		}
+		
 		if($session['remote_userid'] > 0) {
 			return $session;
 		} else {
+			
+			if(!$alreadyfailed['times'] )
+				{
+					//* user login the first time wrong
+					$sql = "INSERT INTO `attempts_login` (`ip`, `times`, `login_time`) VALUES (?, 1, NOW())";
+					$app->db->query($sql, $ip_md5);
+				} elseif($alreadyfailed['times'] >= 1) {
+					//* update times wrong
+					$sql = "UPDATE `attempts_login` SET `times`=`times`+1, `login_time`=NOW() WHERE `ip` = ? AND `login_time` < NOW() ORDER BY `login_time` DESC LIMIT 1";
+					$app->db->query($sql, $ip_md5);
+				}
+			
 			throw new SoapFault('session_does_not_exist', 'The Session is expired or does not exist.');
 			return false;
 		}
