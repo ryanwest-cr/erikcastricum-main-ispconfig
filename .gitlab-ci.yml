@@ -17,7 +17,7 @@ syntax:lint:
     - schedules
     - web
     - merge_requests
-    - /^\d+\.\d+\.\d+$/
+    - /^\d+\.\d+\.\d+(p\d+)?$/
 
   script:
     - echo "Syntax checking PHP files"
@@ -37,7 +37,7 @@ syntax_diff:lint:
     - schedules
     - web
     - merge_requests
-    - /^\d+\.\d+\.\d+$/
+    - /^\d+\.\d+\.\d+(p\d+)?$/
 
   script:
     - echo "Syntax checking PHP files"
@@ -81,7 +81,7 @@ build:package:
     image: edbizarro/gitlab-ci-pipeline-php:7.2
     only:
         refs:
-            - /^\d+\.\d+\.\d+$/
+            - /^\d+\.\d+\.\d+(p\d+)?$/
             - web
 
     script:
@@ -96,7 +96,7 @@ build:package:
         - tar -tvf ISPConfig-${VER}.tar.gz
         - echo "Uploading file to download server"
         - curl -u "${DEPLOY_FTP_USER}:${DEPLOY_FTP_PASSWORD}" -T ISPConfig-${VER}.tar.gz ftp://${DEPLOY_FTP_SERVER}/web/
-        - if [[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ; then echo "Stable release ${VER}" ; curl -u "${DEPLOY_FTP_USER}:${DEPLOY_FTP_PASSWORD}" -T ISPConfig-${VER}.tar.gz ftp://${DEPLOY_FTP_SERVER}/web/ISPConfig-3-stable.tar.gz ; echo -n "${VER}" > ispconfig3_version.txt ; curl -u "${DEPLOY_FTP_USER}:${DEPLOY_FTP_PASSWORD}" -T ispconfig3_version.txt ftp://${DEPLOY_FTP_SERVER}/web/ ; else echo "Dev release ${VER}" ; fi
+        - if [[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+(p[0-9]+)?$ ]] ; then echo "Stable release ${VER}" ; curl -u "${DEPLOY_FTP_USER}:${DEPLOY_FTP_PASSWORD}" -T ISPConfig-${VER}.tar.gz ftp://${DEPLOY_FTP_SERVER}/web/ISPConfig-3-stable.tar.gz ; echo -n "${VER}" > ispconfig3_version.txt ; curl -u "${DEPLOY_FTP_USER}:${DEPLOY_FTP_PASSWORD}" -T ispconfig3_version.txt ftp://${DEPLOY_FTP_SERVER}/web/ ; else echo "Dev release ${VER}" ; fi
         - rm ISPConfig-${VER}.tar.gz
         - echo "Download url is https://download.ispconfig.org/ISPConfig-${VER}.tar.gz"
         
