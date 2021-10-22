@@ -196,9 +196,9 @@ class remoting {
 					if(trim($remote_user['remote_ips']) == '') {
 						$remote_allowed=true;
 					} else {
-						$ip = inet_pton($_SERVER['REMOTE_ADDR']);
+						$ip_bin = inet_pton($ip);
 						foreach($allowed_ips as $allowed) {
-							if($ip == inet_pton(trim($allowed))) {
+							if($ip_bin == inet_pton(trim($allowed))) {
 								$remote_allowed=true;
 								break;
 							}
