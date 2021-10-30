@@ -1659,6 +1659,7 @@ class installer_base {
 		$content = str_replace('{mysql_server_ip}', $conf['mysql']['ip'], $content);
 		wf($conf['amavis']['config_dir'].'/conf.d/50-user', $content);
 		chmod($conf['amavis']['config_dir'].'/conf.d/50-user', 0640);
+		chgrp($conf['amavis']['config_dir'].'/conf.d/50-user', 'amavis');
 
 		// TODO: chmod and chown on the config file
 
