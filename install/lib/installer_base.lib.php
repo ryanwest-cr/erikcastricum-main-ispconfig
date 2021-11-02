@@ -52,7 +52,7 @@ class installer_base {
 	}
 
 	public function update_acme() {
-		$acme = explode("\n", shell_exec('which /usr/local/ispconfig/server/scripts/acme.sh /root/.acme.sh/acme.sh'));
+		$acme = explode("\n", shell_exec('which acme.sh /usr/local/ispconfig/server/scripts/acme.sh /root/.acme.sh/acme.sh'));
 		$acme = reset($acme);
 		$val = 0;
 
@@ -1659,6 +1659,7 @@ class installer_base {
 		$content = str_replace('{mysql_server_ip}', $conf['mysql']['ip'], $content);
 		wf($conf['amavis']['config_dir'].'/conf.d/50-user', $content);
 		chmod($conf['amavis']['config_dir'].'/conf.d/50-user', 0640);
+		chgrp($conf['amavis']['config_dir'].'/conf.d/50-user', 'amavis');
 
 		// TODO: chmod and chown on the config file
 
@@ -2965,7 +2966,7 @@ class installer_base {
 			$le_client = reset($le_client);
 
 			// Check for Neilpang acme.sh as well
-			$acme = explode("\n", shell_exec('which /usr/local/ispconfig/server/scripts/acme.sh /root/.acme.sh/acme.sh'));
+			$acme = explode("\n", shell_exec('which acme.sh /usr/local/ispconfig/server/scripts/acme.sh /root/.acme.sh/acme.sh'));
 			$acme = reset($acme);
 
 			if((!$acme || !is_executable($acme)) && (!$le_client || !is_executable($le_client))) {
@@ -2973,7 +2974,7 @@ class installer_base {
 				if(!$success) {
 					swriteln('Failed installing acme.sh. Will not be able to issue certificate during install.');
 				} else {
-					$acme = explode("\n", shell_exec('which /usr/local/ispconfig/server/scripts/acme.sh /root/.acme.sh/acme.sh'));
+					$acme = explode("\n", shell_exec('which acme.sh /usr/local/ispconfig/server/scripts/acme.sh /root/.acme.sh/acme.sh'));
 					$acme = reset($acme);
 					if($acme && is_executable($acme)) {
 						swriteln('Installed acme.sh and using it for certificate creation during install.');
@@ -3016,14 +3017,30 @@ class installer_base {
 			$issued_successfully = false;
 
 			// Backup existing ispserver ssl files
-			if(file_exists($ssl_crt_file) || is_link($ssl_crt_file)) {
-				copy($ssl_crt_file, $ssl_crt_file . '-temporary.bak');
-			}
-			if(file_exists($ssl_key_file) || is_link($ssl_key_file)) {
-				copy($ssl_key_file, $ssl_key_file . '-temporary.bak');
-			}
-			if(file_exists($ssl_pem_file) || is_link($ssl_pem_file)) {
-				copy($ssl_pem_file, $ssl_pem_file . '-temporary.bak');
+			//
+			// We may find valid or broken symlinks or actual files here.
+			//
+			// - dangling links are broken and get perm renamed (should just delete?).
+			//   possibly web server can't start because vhost file points to non-existing cert files,
+			//   we're not trying to catch or fix that (and not making it worse)
+			//
+			// - link to valid file is tmp renamed, and file copied to original name.
+			//   if cert request is successful, remove the old symlink;
+			//   if cert request fails, remove file copy and rename symlink to original name
+			//
+			// - actual file copied to tmp name.
+			//   if cert request is successful, rename tmp copy to perm rename;
+			//   if cert request fails, delete tmp copy
+			$cert_files = array( $ssl_crt_file, $ssl_key_file, $ssl_pem_file );
+			foreach ($cert_files as $f) {
+				if (is_link($f) && ! file_exists($f)) {
+					rename($f, $f.'-'.$date->format('YmdHis').'.bak');
+				} elseif (is_link($f)) {
+					rename($f, $f.'-temporary.bak');
+					copy($f.'-temporary.bak', $f);
+				} elseif(file_exists($f)) {
+					copy($f, $f.'-temporary.bak');
+				}
 			}
 
 			// Attempt to use Neilpang acme.sh first, as it is now the preferred LE client
@@ -3062,26 +3079,28 @@ class installer_base {
 					umask($old_umask);
 
 					// Make temporary backup of self-signed certs permanent
-					if(file_exists($ssl_crt_file.'-temporary.bak') || is_link($ssl_crt_file.'-temporary.bak'))
-						rename($ssl_crt_file.'-temporary.bak', $ssl_crt_file.'-'.$date->format('YmdHis').'.bak');
-					if(file_exists($ssl_key_file.'-temporary.bak') || is_link($ssl_key_file.'-temporary.bak'))
-						rename($ssl_key_file.'-temporary.bak', $ssl_key_file.'-'.$date->format('YmdHis').'.bak');
-					if(file_exists($ssl_pem_file.'-temporary.bak') || is_link($ssl_pem_file.'-temporary.bak'))
-						rename($ssl_pem_file.'-temporary.bak', $ssl_pem_file.'-'.$date->format('YmdHis').'.bak');
+					foreach ($cert_files as $f) {
+						if (is_link($f.'-temporary.bak')) {
+							unlink($f.'-temporary.bak');
+						} elseif(file_exists($f.'-temporary.bak')) {
+							rename($f.'-temporary.bak', $f.'-'.$date->format('YmdHis').'.bak');
+						}
+					}
 
 				} else {
 					swriteln('Issuing certificate via acme.sh failed. Please check that your hostname can be verified by letsencrypt');
 
 					umask($old_umask);
 
-					// Restore temporary backup of self-signed certs
-					if(file_exists($ssl_crt_file.'-temporary.bak') || is_link($ssl_crt_file.'-temporary.bak'))
-						rename($ssl_crt_file.'-temporary.bak', $ssl_crt_file);
-					if(file_exists($ssl_key_file.'-temporary.bak') || is_link($ssl_key_file.'-temporary.bak'))
-						rename($ssl_key_file.'-temporary.bak', $ssl_key_file);
-					if(file_exists($ssl_pem_file.'-temporary.bak') || is_link($ssl_pem_file.'-temporary.bak'))
-						rename($ssl_pem_file.'-temporary.bak', $ssl_pem_file);
-
+					// Restore/cleanup temporary backup of self-signed certs
+					foreach ($cert_files as $f) {
+						if (is_link($f.'-temporary.bak')) {
+							@unlink($f);
+							rename($f.'-temporary.bak', $f);
+						} elseif(file_exists($f.'-temporary.bak')) {
+							unlink($f.'-temporary.bak');
+						}
+					}
 				}
 			// Else, we attempt to use the official LE certbot client certbot
 			} else {
@@ -3120,23 +3139,26 @@ class installer_base {
 						$issued_successfully = true;
 
 						// Make temporary backup of self-signed certs permanent
-						if(file_exists($ssl_crt_file.'-temporary.bak') || is_link($ssl_crt_file.'-temporary.bak'))
-							rename($ssl_crt_file.'-temporary.bak', $ssl_crt_file.'-'.$date->format('YmdHis').'.bak');
-						if(file_exists($ssl_key_file.'-temporary.bak') || is_link($ssl_key_file.'-temporary.bak'))
-							rename($ssl_key_file.'-temporary.bak', $ssl_key_file.'-'.$date->format('YmdHis').'.bak');
-						if(file_exists($ssl_pem_file.'-temporary.bak') || is_link($ssl_pem_file.'-temporary.bak'))
-							rename($ssl_pem_file.'-temporary.bak', $ssl_pem_file.'-'.$date->format('YmdHis').'.bak');
+						foreach ($cert_files as $f) {
+							if (is_link($f.'-temporary.bak')) {
+								unlink($f.'-temporary.bak');
+							} elseif(file_exists($f.'-temporary.bak')) {
+								rename($f.'-temporary.bak', $f.'-'.$date->format('YmdHis').'.bak');
+							}
+						}
 
 					} else {
 						swriteln('Issuing certificate via certbot failed. Please check log files and make sure that your hostname can be verified by letsencrypt');
 
-						// Restore temporary backup of self-signed certs
-						if(file_exists($ssl_crt_file.'-temporary.bak') || is_link($ssl_crt_file.'-temporary.bak'))
-							rename($ssl_crt_file.'-temporary.bak', $ssl_crt_file);
-						if(file_exists($ssl_key_file.'-temporary.bak') || is_link($ssl_key_file.'-temporary.bak'))
-							rename($ssl_key_file.'-temporary.bak', $ssl_key_file);
-						if(file_exists($ssl_pem_file.'-temporary.bak') || is_link($ssl_pem_file.'-temporary.bak'))
-							rename($ssl_pem_file.'-temporary.bak', $ssl_pem_file);
+						// Restore/cleanup temporary backup of self-signed certs
+						foreach ($cert_files as $f) {
+							if (is_link($f.'-temporary.bak')) {
+								@unlink($f);
+								rename($f.'-temporary.bak', $f);
+							} elseif(file_exists($f.'-temporary.bak')) {
+								unlink($f.'-temporary.bak');
+							}
+						}
 
 					}
 				} else {
