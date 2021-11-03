@@ -160,7 +160,7 @@ paths = cat, chgrp, chmod, chown, cp, date, dd, df, dir, echo, false, ln, ls, mk
 
 [wp]
 comment = WordPress Command Line
-paths = wp, /usr/local/bin/php
+paths = wp, which, mysqlcheck, tput, unrar, /usr/local/bin/php
 includesections = php, mysql-client
 
 [mysql-client]
