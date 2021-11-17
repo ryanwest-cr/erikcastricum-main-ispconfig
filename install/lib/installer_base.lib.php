@@ -3133,8 +3133,7 @@ class installer_base {
 						// certbot returns with 0 on issue for already existing certificate
 
 						$acme_cert_dir = '/etc/letsencrypt/live/' . $hostname;
-						foreach (array( 'fullchain.pem', 'privkey.pem' ) as $f) {
-							$f = $acme_cert_dir . '/' . $f;
+						foreach (array( $ssl_crt_file, $ssl_key_file) as $f) {
 							if (file_exists($f) && ! is_link($f)) {
 								unlink($f);
 							}
