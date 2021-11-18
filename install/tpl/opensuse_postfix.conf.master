@@ -57,3 +57,5 @@ smtp_sender_dependent_authentication = yes
 smtp_sasl_auth_enable = yes
 smtp_sasl_security_options = noanonymous, noplaintext
 smtp_sasl_tls_security_options = noanonymous
+authorized_flush_users =
+authorized_mailq_users = nagios, icinga
