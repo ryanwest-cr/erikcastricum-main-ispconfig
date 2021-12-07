@@ -31,7 +31,7 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 require_once '../../lib/config.inc.php';
 require_once '../../lib/app.inc.php';
 
-// Check if we have an active users ession and no login_as.
+// Check if we have an active users session and no login_as.
 if($_SESSION['s']['user']['active'] == 1 && @$_POST['login_as'] != 1) {
 	header('Location: /index.php');
 	die();
@@ -139,7 +139,7 @@ if(count($_POST) > 0) {
 		$sql = "SELECT * FROM `attempts_login` WHERE `ip`= ? AND  `login_time` > (NOW() - INTERVAL 1 MINUTE) LIMIT 1";
 		$alreadyfailed = $app->db->queryOneRecord($sql, $ip);
 
-		//* too many failedlogins
+		//* too many failed logins
 		if($alreadyfailed['times'] > 5) {
 			$error = $app->lng('error_user_too_many_logins');
 		} else {
@@ -264,7 +264,7 @@ if(count($_POST) > 0) {
 
 						$app->plugin->raiseEvent('login', $username);
 
-						//* Save successfull login message to var
+						//* Save successful login message to var
 						$authlog = 'Successful login for user \''. $username .'\' from '. $_SERVER['REMOTE_ADDR'] .' at '. date('Y-m-d H:i:s') . ' with session ID ' .session_id();
 						$authlog_handle = fopen($conf['ispconfig_log_dir'].'/auth.log', 'a');
 						fwrite($authlog_handle, $authlog ."\n");
@@ -316,7 +316,7 @@ if(count($_POST) > 0) {
 	}
 }
 
-// Maintenance mode - show message when people try to log in and also when people are forcedly logged off
+// Maintenance mode - show message when people try to log in and also when people are forcibly logged off
 if($maintenance_mode_error != '') $error = '<strong>'.$maintenance_mode_error.'</strong><br><br>'.$error;
 if($error != ''){
 	$error = '<div class="box box_error">'.$error.'</div>';
