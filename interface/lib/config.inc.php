@@ -159,4 +159,7 @@ define('LOGLEVEL_DEBUG', 0);
 define('LOGLEVEL_WARN', 1);
 define('LOGLEVEL_ERROR', 2);
 
+//** Admin IP whitelist file
+$conf['admin_ip_whitelist_file'] = '/etc/ispconfig_admin_ip_whitelist';
+
 ?>

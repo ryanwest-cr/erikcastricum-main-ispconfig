@@ -106,6 +106,14 @@ function process_login_request(app $app, &$error, $conf, $module)
 		// Maintenance mode - allow logins only when maintenance mode is off or if the user is admin
 		if ($app->is_under_maintenance() && $user['typ'] != 'admin') return;
 
+		if ($user['typ'] == 'admin' && !is_admin_ip_whitelisted($_SERVER['REMOTE_ADDR'], $conf)) {
+			// TODO: if it's not a security risk (information disclosure) to
+			// let the user know they are not whitelisted, then change this
+			// error message to a more appropriate one
+			$error = $app->lng('error_user_password_incorrect');
+			return;
+		}
+
 		// User login right, so attempts can be deleted
 		$sql = "DELETE FROM `attempts_login` WHERE `ip`=?";
 		$app->db->query($sql, $ip);
@@ -187,6 +195,54 @@ function process_login_request(app $app, &$error, $conf, $module)
 		fwrite($authlog_handle, $authlog."\n");
 		fclose($authlog_handle);
 	}
+}
+
+/**
+ * Checks if the given admin's IP address is whitelisted.
+ * @param string $ip
+ * @return bool
+ */
+function is_admin_ip_whitelisted($ip, $conf)
+{
+	// if there is no config value, we assume that webmaster doesn't use this feature
+	if (!isset($conf['admin_ip_whitelist_file'])) return true;
+
+	// if the file doesn't exist, we assume that webmaster doesn't use this feature
+	if (!file_exists($conf['admin_ip_whitelist_file'])) return true;
+
+	$file_content = file_get_contents($conf['admin_ip_whitelist_file']);
+	$file_lines = explode("\n", $file_content);
+
+	$matches = array_filter($file_lines, function($v) use ($ip) {
+		$line = trim($v);
+
+		// exclude empty lines and comments
+		if ($line === '' || $line[0] === '#') return false;
+
+		return ip_matches_cidr($ip, $line);
+	});
+
+	return count($matches) > 0;
+}
+
+// based on https://www.php.net/manual/en/ref.network.php (comments)
+/**
+ * Checks if the given IP address matches the given CIDR.
+ * @param $ip
+ * @param $cidr
+
+ * @return bool
+ */
+function ip_matches_cidr ($ip, $cidr) {
+	list ($net, $mask) = explode ('/', $cidr);
+	if (!$mask) $mask = 32;
+
+	$ip_net = ip2long ($net);
+	$ip_mask = ~((1 << (32 - $mask)) - 1);
+
+	$ip_ip = ip2long ($ip);
+
+	return (($ip_ip & $ip_mask) == ($ip_net & $ip_mask));
 }
 
 /**
