@@ -104,68 +104,67 @@ function process_login_request(app $app, &$error, $conf, $module)
 		}
 
 		// Maintenance mode - allow logins only when maintenance mode is off or if the user is admin
-		if (!$app->is_under_maintenance() || $user['typ'] == 'admin') {
+		if ($app->is_under_maintenance() && $user['typ'] != 'admin') return;
 
-			// User login right, so attempts can be deleted
-			$sql = "DELETE FROM `attempts_login` WHERE `ip`=?";
-			$app->db->query($sql, $ip);
-			$user = $app->db->toLower($user);
+		// User login right, so attempts can be deleted
+		$sql = "DELETE FROM `attempts_login` WHERE `ip`=?";
+		$app->db->query($sql, $ip);
+		$user = $app->db->toLower($user);
 
-			if ($loginAs) $oldSession = $_SESSION['s'];
+		if ($loginAs) $oldSession = $_SESSION['s'];
 
-			// Session regenerate causes login problems on some systems, see Issue #3827
-			// Set session_regenerate_id to no in security settings, it you encounter
-			// this problem.
-			$app->uses('getconf');
-			$security_config = $app->getconf->get_security_config('permissions');
-			if (isset($security_config['session_regenerate_id']) && $security_config['session_regenerate_id'] == 'yes') {
-				if (!$loginAs) session_regenerate_id(true);
+		// Session regenerate causes login problems on some systems, see Issue #3827
+		// Set session_regenerate_id to no in security settings, it you encounter
+		// this problem.
+		$app->uses('getconf');
+		$security_config = $app->getconf->get_security_config('permissions');
+		if (isset($security_config['session_regenerate_id']) && $security_config['session_regenerate_id'] == 'yes') {
+			if (!$loginAs) session_regenerate_id(true);
+		}
+		$_SESSION = array();
+		if ($loginAs) $_SESSION['s_old'] = $oldSession; // keep the way back!
+		$_SESSION['s']['user'] = $user;
+		$_SESSION['s']['user']['theme'] = isset($user['app_theme']) ? $user['app_theme'] : 'default';
+		$_SESSION['s']['language'] = $app->functions->check_language($user['language']);
+		$_SESSION["s"]['theme'] = $_SESSION['s']['user']['theme'];
+		if ($loginAs) $_SESSION['s']['plugin_cache'] = $_SESSION['s_old']['plugin_cache'];
+
+		if (is_file(ISPC_WEB_PATH.'/'.$_SESSION['s']['user']['startmodule'].'/lib/module.conf.php')) {
+			include_once $app->functions->check_include_path(ISPC_WEB_PATH.'/'.$_SESSION['s']['user']['startmodule'].'/lib/module.conf.php');
+			$menu_dir = ISPC_WEB_PATH.'/'.$_SESSION['s']['user']['startmodule'].'/lib/menu.d';
+			include_menu_dir_files($menu_dir);
+			$_SESSION['s']['module'] = $module;
+		}
+		// check if the user theme is valid
+		if ($_SESSION['s']['user']['theme'] != 'default') {
+			$tmp_path = ISPC_THEMES_PATH."/".$_SESSION['s']['user']['theme'];
+			if (!@is_dir($tmp_path) || !@file_exists($tmp_path."/ispconfig_version") || trim(file_get_contents($tmp_path."/ispconfig_version")) != ISPC_APP_VERSION) {
+				// fall back to default theme if this one is not compatible with current ispc version
+				$_SESSION['s']['user']['theme'] = 'default';
+				$_SESSION['s']['theme'] = 'default';
+				$_SESSION['show_error_msg'] = $app->lng('theme_not_compatible');
 			}
-			$_SESSION = array();
-			if ($loginAs) $_SESSION['s_old'] = $oldSession; // keep the way back!
-			$_SESSION['s']['user'] = $user;
-			$_SESSION['s']['user']['theme'] = isset($user['app_theme']) ? $user['app_theme'] : 'default';
-			$_SESSION['s']['language'] = $app->functions->check_language($user['language']);
-			$_SESSION["s"]['theme'] = $_SESSION['s']['user']['theme'];
-			if ($loginAs) $_SESSION['s']['plugin_cache'] = $_SESSION['s_old']['plugin_cache'];
+		}
 
-			if (is_file(ISPC_WEB_PATH.'/'.$_SESSION['s']['user']['startmodule'].'/lib/module.conf.php')) {
-				include_once $app->functions->check_include_path(ISPC_WEB_PATH.'/'.$_SESSION['s']['user']['startmodule'].'/lib/module.conf.php');
-				$menu_dir = ISPC_WEB_PATH.'/'.$_SESSION['s']['user']['startmodule'].'/lib/menu.d';
-				include_menu_dir_files($menu_dir);
-				$_SESSION['s']['module'] = $module;
-			}
-			// check if the user theme is valid
-			if ($_SESSION['s']['user']['theme'] != 'default') {
-				$tmp_path = ISPC_THEMES_PATH."/".$_SESSION['s']['user']['theme'];
-				if (!@is_dir($tmp_path) || !@file_exists($tmp_path."/ispconfig_version") || trim(file_get_contents($tmp_path."/ispconfig_version")) != ISPC_APP_VERSION) {
-					// fall back to default theme if this one is not compatible with current ispc version
-					$_SESSION['s']['user']['theme'] = 'default';
-					$_SESSION['s']['theme'] = 'default';
-					$_SESSION['show_error_msg'] = $app->lng('theme_not_compatible');
-				}
-			}
+		$app->plugin->raiseEvent('login', $username);
 
-			$app->plugin->raiseEvent('login', $username);
+		//* Save successful login message to var
+		$authlog = 'Successful login for user \''.$username.'\' from '.$_SERVER['REMOTE_ADDR'].' at '.date('Y-m-d H:i:s').' with session ID '.session_id();
+		$authlog_handle = fopen($conf['ispconfig_log_dir'].'/auth.log', 'a');
+		fwrite($authlog_handle, $authlog."\n");
+		fclose($authlog_handle);
 
-			//* Save successful login message to var
-			$authlog = 'Successful login for user \''.$username.'\' from '.$_SERVER['REMOTE_ADDR'].' at '.date('Y-m-d H:i:s').' with session ID '.session_id();
-			$authlog_handle = fopen($conf['ispconfig_log_dir'].'/auth.log', 'a');
-			fwrite($authlog_handle, $authlog."\n");
-			fclose($authlog_handle);
+		/*
+		* We need LOGIN_REDIRECT instead of HEADER_REDIRECT to load the
+		* new theme, if the logged-in user has another
+		*/
 
-			/*
-			* We need LOGIN_REDIRECT instead of HEADER_REDIRECT to load the
-			* new theme, if the logged-in user has another
-			*/
-
-			if ($loginAs) {
-				echo 'LOGIN_REDIRECT:'.$_SESSION['s']['module']['startpage'];
-				exit;
-			} else {
-				header('Location: ../index.php');
-				die();
-			}
+		if ($loginAs) {
+			echo 'LOGIN_REDIRECT:'.$_SESSION['s']['module']['startpage'];
+			exit;
+		} else {
+			header('Location: ../index.php');
+			die();
 		}
 	} else {
 		if (!$alreadyfailed['times']) {
