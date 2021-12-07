@@ -93,160 +93,160 @@ function process_login_request(app $app, &$error, $conf, $module)
 	if ($alreadyfailed['times'] > 5) {
 		$error = $app->lng('error_user_too_many_logins');
 		return;
-	} else {
-		if ($loginAs) {
-			$sql = "SELECT * FROM sys_user WHERE USERNAME = ? and PASSWORT = ?";
-			$user = $app->db->queryOneRecord($sql, (string)$username, (string)$password);
-		} else {
-			if (stristr($username, '@')) {
-				//* mailuser login
-				$sql = "SELECT * FROM mail_user WHERE login = ? or email = ?";
-				$mailuser = $app->db->queryOneRecord($sql, (string)$username, $app->functions->idn_encode($username));
-				$user = false;
-				if ($mailuser) {
-					$saved_password = stripslashes($mailuser['password']);
-					//* Check if mailuser password is correct
-					if (crypt(stripslashes($password), $saved_password) == $saved_password) {
-						//* Get the sys_user language of the client of the mailuser
-						$sys_user_lang = $app->db->queryOneRecord("SELECT language FROM sys_user WHERE default_group = ?", $mailuser['sys_groupid']);
+	}
 
-						//* we build a fake user here which has access to the mailuser module only and userid 0
-						$user = array();
-						$user['userid'] = 0;
-						$user['active'] = 1;
-						$user['startmodule'] = 'mailuser';
-						$user['modules'] = 'mailuser';
-						$user['typ'] = 'user';
-						$user['email'] = $mailuser['email'];
-						$user['username'] = $username;
-						if (is_array($sys_user_lang) && $sys_user_lang['language'] != '') {
-							$user['language'] = $sys_user_lang['language'];
-						} else {
-							$user['language'] = $conf['language'];
-						}
-						$user['theme'] = $conf['theme'];
-						$user['app_theme'] = $conf['theme'];
-						$user['mailuser_id'] = $mailuser['mailuser_id'];
-						$user['default_group'] = $mailuser['sys_groupid'];
-					}
-				}
-			} else {
-				//* normal cp user login
-				$sql = "SELECT * FROM sys_user WHERE USERNAME = ?";
-				$user = $app->db->queryOneRecord($sql, (string)$username);
-				if ($user) {
-					$saved_password = stripslashes($user['passwort']);
-					if (substr($saved_password, 0, 1) == '$') {
-						//* The password is encrypted with crypt
-						if (crypt(stripslashes($password), $saved_password) != $saved_password) {
-							$user = false;
-						}
+	if ($loginAs) {
+		$sql = "SELECT * FROM sys_user WHERE USERNAME = ? and PASSWORT = ?";
+		$user = $app->db->queryOneRecord($sql, (string)$username, (string)$password);
+	} else {
+		if (stristr($username, '@')) {
+			//* mailuser login
+			$sql = "SELECT * FROM mail_user WHERE login = ? or email = ?";
+			$mailuser = $app->db->queryOneRecord($sql, (string)$username, $app->functions->idn_encode($username));
+			$user = false;
+			if ($mailuser) {
+				$saved_password = stripslashes($mailuser['password']);
+				//* Check if mailuser password is correct
+				if (crypt(stripslashes($password), $saved_password) == $saved_password) {
+					//* Get the sys_user language of the client of the mailuser
+					$sys_user_lang = $app->db->queryOneRecord("SELECT language FROM sys_user WHERE default_group = ?", $mailuser['sys_groupid']);
+
+					//* we build a fake user here which has access to the mailuser module only and userid 0
+					$user = array();
+					$user['userid'] = 0;
+					$user['active'] = 1;
+					$user['startmodule'] = 'mailuser';
+					$user['modules'] = 'mailuser';
+					$user['typ'] = 'user';
+					$user['email'] = $mailuser['email'];
+					$user['username'] = $username;
+					if (is_array($sys_user_lang) && $sys_user_lang['language'] != '') {
+						$user['language'] = $sys_user_lang['language'];
 					} else {
-						//* The password is md5 encrypted
-						if (md5($password) != $saved_password) {
-							$user = false;
-						} else {
-							// update password with secure algo
-							$sql = 'UPDATE `sys_user` SET `passwort` = ? WHERE `username` = ?';
-							$app->db->query($sql, $app->auth->crypt_password($password), (string)$username);
-						}
+						$user['language'] = $conf['language'];
+					}
+					$user['theme'] = $conf['theme'];
+					$user['app_theme'] = $conf['theme'];
+					$user['mailuser_id'] = $mailuser['mailuser_id'];
+					$user['default_group'] = $mailuser['sys_groupid'];
+				}
+			}
+		} else {
+			//* normal cp user login
+			$sql = "SELECT * FROM sys_user WHERE USERNAME = ?";
+			$user = $app->db->queryOneRecord($sql, (string)$username);
+			if ($user) {
+				$saved_password = stripslashes($user['passwort']);
+				if (substr($saved_password, 0, 1) == '$') {
+					//* The password is encrypted with crypt
+					if (crypt(stripslashes($password), $saved_password) != $saved_password) {
+						$user = false;
 					}
 				} else {
-					$user = false;
-				}
-			}
-		}
-
-		if ($user) {
-			if ($user['active'] == 1) {
-				// Maintenance mode - allow logins only when maintenance mode is off or if the user is admin
-				if (!$app->is_under_maintenance() || $user['typ'] == 'admin') {
-
-					// User login right, so attempts can be deleted
-					$sql = "DELETE FROM `attempts_login` WHERE `ip`=?";
-					$app->db->query($sql, $ip);
-					$user = $app->db->toLower($user);
-
-					if ($loginAs) $oldSession = $_SESSION['s'];
-
-					// Session regenerate causes login problems on some systems, see Issue #3827
-					// Set session_regenerate_id to no in security settings, it you encounter
-					// this problem.
-					$app->uses('getconf');
-					$security_config = $app->getconf->get_security_config('permissions');
-					if (isset($security_config['session_regenerate_id']) && $security_config['session_regenerate_id'] == 'yes') {
-						if (!$loginAs) session_regenerate_id(true);
-					}
-					$_SESSION = array();
-					if ($loginAs) $_SESSION['s_old'] = $oldSession; // keep the way back!
-					$_SESSION['s']['user'] = $user;
-					$_SESSION['s']['user']['theme'] = isset($user['app_theme']) ? $user['app_theme'] : 'default';
-					$_SESSION['s']['language'] = $app->functions->check_language($user['language']);
-					$_SESSION["s"]['theme'] = $_SESSION['s']['user']['theme'];
-					if ($loginAs) $_SESSION['s']['plugin_cache'] = $_SESSION['s_old']['plugin_cache'];
-
-					if (is_file(ISPC_WEB_PATH.'/'.$_SESSION['s']['user']['startmodule'].'/lib/module.conf.php')) {
-						include_once $app->functions->check_include_path(ISPC_WEB_PATH.'/'.$_SESSION['s']['user']['startmodule'].'/lib/module.conf.php');
-						$menu_dir = ISPC_WEB_PATH.'/'.$_SESSION['s']['user']['startmodule'].'/lib/menu.d';
-						include_menu_dir_files($menu_dir);
-						$_SESSION['s']['module'] = $module;
-					}
-					// check if the user theme is valid
-					if ($_SESSION['s']['user']['theme'] != 'default') {
-						$tmp_path = ISPC_THEMES_PATH."/".$_SESSION['s']['user']['theme'];
-						if (!@is_dir($tmp_path) || !@file_exists($tmp_path."/ispconfig_version") || trim(file_get_contents($tmp_path."/ispconfig_version")) != ISPC_APP_VERSION) {
-							// fall back to default theme if this one is not compatible with current ispc version
-							$_SESSION['s']['user']['theme'] = 'default';
-							$_SESSION['s']['theme'] = 'default';
-							$_SESSION['show_error_msg'] = $app->lng('theme_not_compatible');
-						}
-					}
-
-					$app->plugin->raiseEvent('login', $username);
-
-					//* Save successful login message to var
-					$authlog = 'Successful login for user \''.$username.'\' from '.$_SERVER['REMOTE_ADDR'].' at '.date('Y-m-d H:i:s').' with session ID '.session_id();
-					$authlog_handle = fopen($conf['ispconfig_log_dir'].'/auth.log', 'a');
-					fwrite($authlog_handle, $authlog."\n");
-					fclose($authlog_handle);
-
-					/*
-					* We need LOGIN_REDIRECT instead of HEADER_REDIRECT to load the
-					* new theme, if the logged-in user has another
-					*/
-
-					if ($loginAs) {
-						echo 'LOGIN_REDIRECT:'.$_SESSION['s']['module']['startpage'];
-						exit;
+					//* The password is md5 encrypted
+					if (md5($password) != $saved_password) {
+						$user = false;
 					} else {
-						header('Location: ../index.php');
-						die();
+						// update password with secure algo
+						$sql = 'UPDATE `sys_user` SET `passwort` = ? WHERE `username` = ?';
+						$app->db->query($sql, $app->auth->crypt_password($password), (string)$username);
 					}
 				}
 			} else {
-				$error = $app->lng('error_user_blocked');
+				$user = false;
+			}
+		}
+	}
+
+	if ($user) {
+		if ($user['active'] == 1) {
+			// Maintenance mode - allow logins only when maintenance mode is off or if the user is admin
+			if (!$app->is_under_maintenance() || $user['typ'] == 'admin') {
+
+				// User login right, so attempts can be deleted
+				$sql = "DELETE FROM `attempts_login` WHERE `ip`=?";
+				$app->db->query($sql, $ip);
+				$user = $app->db->toLower($user);
+
+				if ($loginAs) $oldSession = $_SESSION['s'];
+
+				// Session regenerate causes login problems on some systems, see Issue #3827
+				// Set session_regenerate_id to no in security settings, it you encounter
+				// this problem.
+				$app->uses('getconf');
+				$security_config = $app->getconf->get_security_config('permissions');
+				if (isset($security_config['session_regenerate_id']) && $security_config['session_regenerate_id'] == 'yes') {
+					if (!$loginAs) session_regenerate_id(true);
+				}
+				$_SESSION = array();
+				if ($loginAs) $_SESSION['s_old'] = $oldSession; // keep the way back!
+				$_SESSION['s']['user'] = $user;
+				$_SESSION['s']['user']['theme'] = isset($user['app_theme']) ? $user['app_theme'] : 'default';
+				$_SESSION['s']['language'] = $app->functions->check_language($user['language']);
+				$_SESSION["s"]['theme'] = $_SESSION['s']['user']['theme'];
+				if ($loginAs) $_SESSION['s']['plugin_cache'] = $_SESSION['s_old']['plugin_cache'];
+
+				if (is_file(ISPC_WEB_PATH.'/'.$_SESSION['s']['user']['startmodule'].'/lib/module.conf.php')) {
+					include_once $app->functions->check_include_path(ISPC_WEB_PATH.'/'.$_SESSION['s']['user']['startmodule'].'/lib/module.conf.php');
+					$menu_dir = ISPC_WEB_PATH.'/'.$_SESSION['s']['user']['startmodule'].'/lib/menu.d';
+					include_menu_dir_files($menu_dir);
+					$_SESSION['s']['module'] = $module;
+				}
+				// check if the user theme is valid
+				if ($_SESSION['s']['user']['theme'] != 'default') {
+					$tmp_path = ISPC_THEMES_PATH."/".$_SESSION['s']['user']['theme'];
+					if (!@is_dir($tmp_path) || !@file_exists($tmp_path."/ispconfig_version") || trim(file_get_contents($tmp_path."/ispconfig_version")) != ISPC_APP_VERSION) {
+						// fall back to default theme if this one is not compatible with current ispc version
+						$_SESSION['s']['user']['theme'] = 'default';
+						$_SESSION['s']['theme'] = 'default';
+						$_SESSION['show_error_msg'] = $app->lng('theme_not_compatible');
+					}
+				}
+
+				$app->plugin->raiseEvent('login', $username);
+
+				//* Save successful login message to var
+				$authlog = 'Successful login for user \''.$username.'\' from '.$_SERVER['REMOTE_ADDR'].' at '.date('Y-m-d H:i:s').' with session ID '.session_id();
+				$authlog_handle = fopen($conf['ispconfig_log_dir'].'/auth.log', 'a');
+				fwrite($authlog_handle, $authlog."\n");
+				fclose($authlog_handle);
+
+				/*
+				* We need LOGIN_REDIRECT instead of HEADER_REDIRECT to load the
+				* new theme, if the logged-in user has another
+				*/
+
+				if ($loginAs) {
+					echo 'LOGIN_REDIRECT:'.$_SESSION['s']['module']['startpage'];
+					exit;
+				} else {
+					header('Location: ../index.php');
+					die();
+				}
 			}
 		} else {
-			if (!$alreadyfailed['times']) {
-				//* user login the first time wrong
-				$sql = "INSERT INTO `attempts_login` (`ip`, `times`, `login_time`) VALUES (?, 1, NOW())";
-				$app->db->query($sql, $ip);
-			} elseif ($alreadyfailed['times'] >= 1) {
-				//* update times wrong
-				$sql = "UPDATE `attempts_login` SET `times`=`times`+1, `login_time`=NOW() WHERE `ip` = ? AND `login_time` < NOW() ORDER BY `login_time` DESC LIMIT 1";
-				$app->db->query($sql, $ip);
-			}
-			//* Incorrect login - Username and password incorrect
-			$error = $app->lng('error_user_password_incorrect');
-			if ($app->db->errorMessage != '') $error .= '<br />'.$app->db->errorMessage != '';
-
-			$app->plugin->raiseEvent('login_failed', $username);
-			//* Save failed login message to var
-			$authlog = 'Failed login for user \''.$username.'\' from '.$_SERVER['REMOTE_ADDR'].' at '.date('Y-m-d H:i:s');
-			$authlog_handle = fopen($conf['ispconfig_log_dir'].'/auth.log', 'a');
-			fwrite($authlog_handle, $authlog."\n");
-			fclose($authlog_handle);
+			$error = $app->lng('error_user_blocked');
 		}
+	} else {
+		if (!$alreadyfailed['times']) {
+			//* user login the first time wrong
+			$sql = "INSERT INTO `attempts_login` (`ip`, `times`, `login_time`) VALUES (?, 1, NOW())";
+			$app->db->query($sql, $ip);
+		} elseif ($alreadyfailed['times'] >= 1) {
+			//* update times wrong
+			$sql = "UPDATE `attempts_login` SET `times`=`times`+1, `login_time`=NOW() WHERE `ip` = ? AND `login_time` < NOW() ORDER BY `login_time` DESC LIMIT 1";
+			$app->db->query($sql, $ip);
+		}
+		//* Incorrect login - Username and password incorrect
+		$error = $app->lng('error_user_password_incorrect');
+		if ($app->db->errorMessage != '') $error .= '<br />'.$app->db->errorMessage != '';
+
+		$app->plugin->raiseEvent('login_failed', $username);
+		//* Save failed login message to var
+		$authlog = 'Failed login for user \''.$username.'\' from '.$_SERVER['REMOTE_ADDR'].' at '.date('Y-m-d H:i:s');
+		$authlog_handle = fopen($conf['ispconfig_log_dir'].'/auth.log', 'a');
+		fwrite($authlog_handle, $authlog."\n");
+		fclose($authlog_handle);
 	}
 }
 
