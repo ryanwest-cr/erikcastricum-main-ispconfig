@@ -202,65 +202,77 @@ function validate_and_fetch_user(app $app, $username, $password, $loginAs, $conf
 {
 	if ($loginAs) {
 		$sql = "SELECT * FROM sys_user WHERE USERNAME = ? and PASSWORT = ?";
-		$user = $app->db->queryOneRecord($sql, (string)$username, (string)$password);
-	} else {
-		if (stristr($username, '@')) {
-			//* mailuser login
-			$sql = "SELECT * FROM mail_user WHERE login = ? or email = ?";
-			$mailuser = $app->db->queryOneRecord($sql, (string)$username, $app->functions->idn_encode($username));
-			$user = false;
-			if ($mailuser) {
-				$saved_password = stripslashes($mailuser['password']);
-				//* Check if mailuser password is correct
-				if (crypt(stripslashes($password), $saved_password) == $saved_password) {
-					//* Get the sys_user language of the client of the mailuser
-					$sys_user_lang = $app->db->queryOneRecord("SELECT language FROM sys_user WHERE default_group = ?", $mailuser['sys_groupid']);
+		return $app->db->queryOneRecord($sql, (string)$username, (string)$password);
+	}
 
-					//* we build a fake user here which has access to the mailuser module only and userid 0
-					$user = array();
-					$user['userid'] = 0;
-					$user['active'] = 1;
-					$user['startmodule'] = 'mailuser';
-					$user['modules'] = 'mailuser';
-					$user['typ'] = 'user';
-					$user['email'] = $mailuser['email'];
-					$user['username'] = $username;
-					if (is_array($sys_user_lang) && $sys_user_lang['language'] != '') {
-						$user['language'] = $sys_user_lang['language'];
-					} else {
-						$user['language'] = $conf['language'];
-					}
-					$user['theme'] = $conf['theme'];
-					$user['app_theme'] = $conf['theme'];
-					$user['mailuser_id'] = $mailuser['mailuser_id'];
-					$user['default_group'] = $mailuser['sys_groupid'];
-				}
-			}
+	if (stristr($username, '@')) {
+		//* mailuser login
+		$sql = "SELECT * FROM mail_user WHERE login = ? or email = ?";
+		$mailuser = $app->db->queryOneRecord($sql, (string)$username, $app->functions->idn_encode($username));
+
+		return $mailuser
+			? build_fake_user($app, $username, $password, $mailuser, $conf)
+			: false;
+	}
+
+	//* normal cp user login
+	$sql = "SELECT * FROM sys_user WHERE USERNAME = ?";
+	$user = $app->db->queryOneRecord($sql, (string)$username);
+	if (!$user) return false;
+
+	$saved_password = stripslashes($user['passwort']);
+	if (substr($saved_password, 0, 1) == '$') {
+		//* The password is encrypted with crypt
+		return crypt(stripslashes($password), $saved_password) == $saved_password
+			? $user
+			: false;
+	}
+
+	//* The password is md5 encrypted
+	if (md5($password) != $saved_password) return false;
+
+	// update password with secure algo
+	$sql = 'UPDATE `sys_user` SET `passwort` = ? WHERE `username` = ?';
+	$app->db->query($sql, $app->auth->crypt_password($password), (string)$username);
+
+	return $user;
+}
+
+/**
+ * @param app $app
+ * @param $username
+ * @param $password
+ * @param array $mailuser
+ * @param array $user
+ * @param $conf
+ * @return array
+ */
+function build_fake_user(app $app, $username, $password, array $mailuser, $conf)
+{
+	$saved_password = stripslashes($mailuser['password']);
+	//* Check if mailuser password is correct
+	if (crypt(stripslashes($password), $saved_password) == $saved_password) {
+		//* Get the sys_user language of the client of the mailuser
+		$sys_user_lang = $app->db->queryOneRecord("SELECT language FROM sys_user WHERE default_group = ?", $mailuser['sys_groupid']);
+
+		//* we build a fake user here which has access to the mailuser module only and userid 0
+		$user = array();
+		$user['userid'] = 0;
+		$user['active'] = 1;
+		$user['startmodule'] = 'mailuser';
+		$user['modules'] = 'mailuser';
+		$user['typ'] = 'user';
+		$user['email'] = $mailuser['email'];
+		$user['username'] = $username;
+		if (is_array($sys_user_lang) && $sys_user_lang['language'] != '') {
+			$user['language'] = $sys_user_lang['language'];
 		} else {
-			//* normal cp user login
-			$sql = "SELECT * FROM sys_user WHERE USERNAME = ?";
-			$user = $app->db->queryOneRecord($sql, (string)$username);
-			if ($user) {
-				$saved_password = stripslashes($user['passwort']);
-				if (substr($saved_password, 0, 1) == '$') {
-					//* The password is encrypted with crypt
-					if (crypt(stripslashes($password), $saved_password) != $saved_password) {
-						$user = false;
-					}
-				} else {
-					//* The password is md5 encrypted
-					if (md5($password) != $saved_password) {
-						$user = false;
-					} else {
-						// update password with secure algo
-						$sql = 'UPDATE `sys_user` SET `passwort` = ? WHERE `username` = ?';
-						$app->db->query($sql, $app->auth->crypt_password($password), (string)$username);
-					}
-				}
-			} else {
-				$user = false;
-			}
+			$user['language'] = $conf['language'];
 		}
+		$user['theme'] = $conf['theme'];
+		$user['app_theme'] = $conf['theme'];
+		$user['mailuser_id'] = $mailuser['mailuser_id'];
+		$user['default_group'] = $mailuser['sys_groupid'];
 	}
 
 	return $user;
