@@ -83,70 +83,7 @@ function process_login_request(app $app, &$error, $conf, $module)
 		return;
 	}
 
-	/*
-	 *  Check, if there is a "login as" instead of a "normal" login
-	 */
-	if (isset($_SESSION['s']['user']) && $_SESSION['s']['user']['active'] == 1) {
-		/*
-		 * only the admin or reseller can "login as" so if the user is NOT an admin or reseller, we
-		 * open the startpage (after killing the old session), so the user
-		 * is logout and has to start again!
-		 */
-		if ($_SESSION['s']['user']['typ'] != 'admin' && !$app->auth->has_clients($_SESSION['s']['user']['userid'])) {
-			/*
-			 * The actual user is NOT a admin or reseller, but maybe he
-			 * has logged in as "normal" user before...
-			 */
-
-			if (isset($_SESSION['s_old']) && ($_SESSION['s_old']['user']['typ'] == 'admin' || $app->auth->has_clients($_SESSION['s_old']['user']['userid']))) {
-				/* The "old" user is admin or reseller, so everything is ok
-				 * if he is reseller, we need to check if he logs in to one of his clients
-				 */
-				if ($_SESSION['s_old']['user']['typ'] != 'admin') {
-
-					/* this is the one currently logged in (normal user) */
-					$old_client_group_id = $app->functions->intval($_SESSION["s"]["user"]["default_group"]);
-					$old_client = $app->db->queryOneRecord("SELECT client.client_id, client.parent_client_id FROM sys_group, client WHERE sys_group.client_id = client.client_id and sys_group.groupid = ?", $old_client_group_id);
-
-					/* this is the reseller, that shall be re-logged in */
-					$sql = "SELECT * FROM sys_user WHERE USERNAME = ? and PASSWORT = ?";
-					$tmp = $app->db->queryOneRecord($sql, (string)$username, (string)$password);
-					$client_group_id = $app->functions->intval($tmp['default_group']);
-					$tmp_client = $app->db->queryOneRecord("SELECT client.client_id FROM sys_group, client WHERE sys_group.client_id = client.client_id and sys_group.groupid = ?", $client_group_id);
-
-					if (!$tmp_client || $old_client["parent_client_id"] != $tmp_client["client_id"] || $tmp["default_group"] != $_SESSION["s_old"]["user"]["default_group"]) {
-						die("You don't have the right to 'login as' this user!");
-					}
-					unset($old_client);
-					unset($tmp_client);
-					unset($tmp);
-				}
-			} else {
-				die("You don't have the right to 'login as'!");
-			}
-		} elseif ($_SESSION['s']['user']['typ'] != 'admin' && (!isset($_SESSION['s_old']['user']) || $_SESSION['s_old']['user']['typ'] != 'admin')) {
-			/* a reseller wants to 'login as', we need to check if he is allowed to */
-			$res_client_group_id = $app->functions->intval($_SESSION["s"]["user"]["default_group"]);
-			$res_client = $app->db->queryOneRecord("SELECT client.client_id FROM sys_group, client WHERE sys_group.client_id = client.client_id and sys_group.groupid = ?", $res_client_group_id);
-
-			/* this is the user the reseller wants to 'login as' */
-			$sql = "SELECT * FROM sys_user WHERE USERNAME = ? and PASSWORT = ?";
-			$tmp = $app->db->queryOneRecord($sql, (string)$username, (string)$password);
-			$tmp_client = $app->db->queryOneRecord("SELECT client.client_id, client.parent_client_id FROM sys_group, client WHERE sys_group.client_id = client.client_id and sys_group.groupid = ?", $tmp["default_group"]);
-
-			if (!$tmp || $tmp_client["parent_client_id"] != $res_client["client_id"]) {
-				die("You don't have the right to login as this user!");
-			}
-			unset($res_client);
-			unset($tmp);
-			unset($tmp_client);
-		}
-		$loginAs = true;
-
-	} else {
-		/* normal login */
-		$loginAs = false;
-	}
+	$loginAs = is_login_as($app, $username, $password);
 
 	//* Check if there are already wrong logins
 	$sql = "SELECT * FROM `attempts_login` WHERE `ip`= ? AND  `login_time` > (NOW() - INTERVAL 1 MINUTE) LIMIT 1";
@@ -310,6 +247,80 @@ function process_login_request(app $app, &$error, $conf, $module)
 			fclose($authlog_handle);
 		}
 	}
+}
+
+/**
+ * Checks if there is a "login as" instead of a "normal" login
+ * @param app $app
+ * @param $username
+ * @param $password
+ * @return bool
+ */
+function is_login_as(app $app, $username, $password)
+{
+	if (isset($_SESSION['s']['user']) && $_SESSION['s']['user']['active'] == 1) {
+		/*
+		 * only the admin or reseller can "login as" so if the user is NOT an admin or reseller, we
+		 * open the startpage (after killing the old session), so the user
+		 * is logout and has to start again!
+		 */
+		if ($_SESSION['s']['user']['typ'] != 'admin' && !$app->auth->has_clients($_SESSION['s']['user']['userid'])) {
+			/*
+			 * The actual user is NOT a admin or reseller, but maybe he
+			 * has logged in as "normal" user before...
+			 */
+
+			if (isset($_SESSION['s_old']) && ($_SESSION['s_old']['user']['typ'] == 'admin' || $app->auth->has_clients($_SESSION['s_old']['user']['userid']))) {
+				/* The "old" user is admin or reseller, so everything is ok
+				 * if he is reseller, we need to check if he logs in to one of his clients
+				 */
+				if ($_SESSION['s_old']['user']['typ'] != 'admin') {
+
+					/* this is the one currently logged in (normal user) */
+					$old_client_group_id = $app->functions->intval($_SESSION["s"]["user"]["default_group"]);
+					$old_client = $app->db->queryOneRecord("SELECT client.client_id, client.parent_client_id FROM sys_group, client WHERE sys_group.client_id = client.client_id and sys_group.groupid = ?", $old_client_group_id);
+
+					/* this is the reseller, that shall be re-logged in */
+					$sql = "SELECT * FROM sys_user WHERE USERNAME = ? and PASSWORT = ?";
+					$tmp = $app->db->queryOneRecord($sql, (string)$username, (string)$password);
+					$client_group_id = $app->functions->intval($tmp['default_group']);
+					$tmp_client = $app->db->queryOneRecord("SELECT client.client_id FROM sys_group, client WHERE sys_group.client_id = client.client_id and sys_group.groupid = ?", $client_group_id);
+
+					if (!$tmp_client || $old_client["parent_client_id"] != $tmp_client["client_id"] || $tmp["default_group"] != $_SESSION["s_old"]["user"]["default_group"]) {
+						die("You don't have the right to 'login as' this user!");
+					}
+					unset($old_client);
+					unset($tmp_client);
+					unset($tmp);
+				}
+			} else {
+				die("You don't have the right to 'login as'!");
+			}
+		} elseif ($_SESSION['s']['user']['typ'] != 'admin' && (!isset($_SESSION['s_old']['user']) || $_SESSION['s_old']['user']['typ'] != 'admin')) {
+			/* a reseller wants to 'login as', we need to check if he is allowed to */
+			$res_client_group_id = $app->functions->intval($_SESSION["s"]["user"]["default_group"]);
+			$res_client = $app->db->queryOneRecord("SELECT client.client_id FROM sys_group, client WHERE sys_group.client_id = client.client_id and sys_group.groupid = ?", $res_client_group_id);
+
+			/* this is the user the reseller wants to 'login as' */
+			$sql = "SELECT * FROM sys_user WHERE USERNAME = ? and PASSWORT = ?";
+			$tmp = $app->db->queryOneRecord($sql, (string)$username, (string)$password);
+			$tmp_client = $app->db->queryOneRecord("SELECT client.client_id, client.parent_client_id FROM sys_group, client WHERE sys_group.client_id = client.client_id and sys_group.groupid = ?", $tmp["default_group"]);
+
+			if (!$tmp || $tmp_client["parent_client_id"] != $res_client["client_id"]) {
+				die("You don't have the right to login as this user!");
+			}
+			unset($res_client);
+			unset($tmp);
+			unset($tmp_client);
+		}
+		$loginAs = true;
+
+	} else {
+		/* normal login */
+		$loginAs = false;
+	}
+
+	return $loginAs;
 }
 
 //* Login Form was sent
