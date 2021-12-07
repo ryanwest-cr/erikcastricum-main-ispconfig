@@ -76,7 +76,11 @@ function process_login_request(app $app, &$error, $conf, $module)
 	$loginAs = false;
 	$time = time();
 
-	if ($username != '' && $password != '' && $error == '') {
+	if ($username == '' || $password == '' || $error != '') {
+		//* Username or password empty
+		if ($error == '') $error = $app->lng('error_user_password_empty');
+		$app->plugin->raiseEvent('login_empty', $username);
+	} else {
 		/*
 		 *  Check, if there is a "login as" instead of a "normal" login
 		 */
@@ -306,10 +310,6 @@ function process_login_request(app $app, &$error, $conf, $module)
 				fclose($authlog_handle);
 			}
 		}
-	} else {
-		//* Username or password empty
-		if ($error == '') $error = $app->lng('error_user_password_empty');
-		$app->plugin->raiseEvent('login_empty', $username);
 	}
 }
 
