@@ -92,6 +92,7 @@ function process_login_request(app $app, &$error, $conf, $module)
 	//* too many failed logins
 	if ($alreadyfailed['times'] > 5) {
 		$error = $app->lng('error_user_too_many_logins');
+		return;
 	} else {
 		if ($loginAs) {
 			$sql = "SELECT * FROM sys_user WHERE USERNAME = ? and PASSWORT = ?";
