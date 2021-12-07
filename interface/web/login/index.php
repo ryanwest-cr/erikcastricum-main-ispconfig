@@ -56,9 +56,15 @@ if ($app->is_under_maintenance()) {
 	$maintenance_mode_error = $app->lng('error_maintenance_mode');
 }
 
-//* Login Form was sent
-if (count($_POST) > 0) {
-
+/**
+ * @param app $app
+ * @param $error
+ * @param $conf
+ * @param $module
+ * @return void
+ */
+function process_login_request(app $app, &$error, $conf, $module)
+{
 	//** Check variables
 	if (!preg_match("/^[\w\.\-\_\@]{1,128}$/", $app->functions->idn_encode($_POST['username']))) $error = $app->lng('user_regex_error');
 	if (!preg_match("/^.{1,256}$/i", $_POST['password'])) $error = $app->lng('pw_error_length');
@@ -305,6 +311,11 @@ if (count($_POST) > 0) {
 		if ($error == '') $error = $app->lng('error_user_password_empty');
 		$app->plugin->raiseEvent('login_empty', $username);
 	}
+}
+
+//* Login Form was sent
+if (count($_POST) > 0) {
+	process_login_request($app, $error, $conf, $module);
 }
 
 // Maintenance mode - show message when people try to log in and also when people are forcibly logged off
