@@ -31,6 +31,8 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 require_once '../../lib/config.inc.php';
 require_once '../../lib/app.inc.php';
 
+include_once '../common.php';
+
 // Check if we have an active users session and no login_as.
 if ($_SESSION['s']['user']['active'] == 1 && @$_POST['login_as'] != 1) {
 	header('Location: /index.php');
@@ -238,16 +240,7 @@ if (count($_POST) > 0) {
 						if (is_file(ISPC_WEB_PATH.'/'.$_SESSION['s']['user']['startmodule'].'/lib/module.conf.php')) {
 							include_once $app->functions->check_include_path(ISPC_WEB_PATH.'/'.$_SESSION['s']['user']['startmodule'].'/lib/module.conf.php');
 							$menu_dir = ISPC_WEB_PATH.'/'.$_SESSION['s']['user']['startmodule'].'/lib/menu.d';
-							if (is_dir($menu_dir)) {
-								if ($dh = opendir($menu_dir)) {
-									//** Go through all files in the menu dir
-									while (($file = readdir($dh)) !== false) {
-										if ($file != '.' && $file != '..' && substr($file, -9, 9) == '.menu.php' && $file != 'dns_resync.menu.php') {
-											include_once $menu_dir.'/'.$file;
-										}
-									}
-								}
-							}
+							include_menu_dir_files($menu_dir);
 							$_SESSION['s']['module'] = $module;
 						}
 						// check if the user theme is valid
