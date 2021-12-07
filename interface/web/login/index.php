@@ -80,6 +80,7 @@ function process_login_request(app $app, &$error, $conf, $module)
 		//* Username or password empty
 		if ($error == '') $error = $app->lng('error_user_password_empty');
 		$app->plugin->raiseEvent('login_empty', $username);
+		return;
 	} else {
 		/*
 		 *  Check, if there is a "login as" instead of a "normal" login
