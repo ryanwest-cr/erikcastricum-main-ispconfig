@@ -606,6 +606,28 @@ class remoting_dns extends remoting {
 	// ----------------------------------------------------------------------------------------------------------------
 
 	//* Get record details
+	public function dns_ds_get($session_id, $primary_id) {
+		return $this->dns_rr_get($session_id, $primary_id, 'DS');
+	}
+
+	//* Add a record
+	public function dns_ds_add($session_id, $client_id, $params, $update_serial=false) {
+		return $this->dns_rr_add($session_id, $client_id, $params, $update_serial, 'DS');
+	}
+
+	//* Update a record
+	public function dns_ds_update($session_id, $client_id, $primary_id, $params, $update_serial=false) {
+		return $this->dns_rr_update($session_id, $client_id, $primary_id, $params, $update_serial, 'DS');
+	}
+
+	//* Delete a record
+	public function dns_ds_delete($session_id, $primary_id, $update_serial=false) {
+		return $this->dns_rr_delete($session_id, $primary_id, $update_serial, 'DS');
+	}
+
+	// ----------------------------------------------------------------------------------------------------------------
+
+	//* Get record details
 	public function dns_ptr_get($session_id, $primary_id) {
 		return $this->dns_rr_get($session_id, $primary_id, 'PTR');
 	}
