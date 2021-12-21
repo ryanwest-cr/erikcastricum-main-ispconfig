@@ -42,7 +42,7 @@ class remoting_dns extends remoting {
 	// DNS Function --------------------------------------------------------------------------------------------------
 
 	//* Create Zone with Template
-	public function dns_templatezone_add($session_id, $client_id, $template_id, $domain, $ip, $ns1, $ns2, $email) {
+	public function dns_templatezone_add($session_id, $client_id, $template_id, $domain, $ip, $ns1, $ns2, $email, $ipv6 = '') {
 		global $app, $conf;
 		if(!$this->checkPerm($session_id, 'dns_templatezone_add')) {
 			throw new SoapFault('permission_denied', 'You do not have the permissions to access this function.');
@@ -63,6 +63,7 @@ class remoting_dns extends remoting {
 		$tpl_content = $template_record['template'];
 		if($domain != '') $tpl_content = str_replace('{DOMAIN}', $domain, $tpl_content);
 		if($ip != '') $tpl_content = str_replace('{IP}', $ip, $tpl_content);
+		if($ipv6 != '') $tpl_content = str_replace('{IPV6}', $ipv6, $tpl_content);
 		if($ns1 != '') $tpl_content = str_replace('{NS1}', $ns1, $tpl_content);
 		if($ns2 != '') $tpl_content = str_replace('{NS2}', $ns2, $tpl_content);
 		if($email != '') $tpl_content = str_replace('{EMAIL}', $email, $tpl_content);
