@@ -1,0 +1,14 @@
+MIME-Version: 1.0
+Content-type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+From: {admin_mail}
+Reply-To: {admin_mail}
+Subject: Upozornenie na veľkosť webstránky
+
+Webstránka {domain} je blízko alebo prekročila limit veľkosti.
+
+Doména: 				{domain}
+Využité miesto:			{used}
+Mäkký limit:			{soft}
+Tvrdý limit:			{hard}
+Percento využitia:		{ratio}
