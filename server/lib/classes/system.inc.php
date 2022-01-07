@@ -1707,10 +1707,7 @@ class system{
 			$out = '';
 			foreach($lines as $line) {
 				if($strict == 0 && preg_match('/^REGEX:(.*)$/', $search_pattern)) {
-					if(preg_match(substr($search_pattern, 6), $line)) {
-						$out .= $new_line."\n";
-						$found = 1;
-					} else {
+					if(!preg_match(substr($search_pattern, 6), $line)) {
 						$out .= $line;
 					}
 				} elseif($strict == 0) {
