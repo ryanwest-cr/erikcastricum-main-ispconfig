@@ -291,96 +291,68 @@ function get_distname() {
 		}
 	}
 
+	//** RHEL (including compatible clones) & Fedora
+        elseif(file_exists('/etc/redhat-release') && file_exists('/etc/os-release')) {
+                $content = file_get_contents('/etc/os-release');
 
-	//** Redhat
-	elseif(file_exists('/etc/redhat-release')) {
+                preg_match('/(?<=NAME=\").+?(?=\")/', $content, $name);
+                preg_match('/(?<=VERSION=\").+?(?=\")/', $content, $version);
+                preg_match('/(?<=VERSION_ID=\").+?(?=\")/', $content, $versionid);
 
-		$content = file_get_contents('/etc/redhat-release');
-
-		if(stristr($content, 'Fedora release 9 (Sulphur)')) {
-			$distname = 'Fedora';
-			$distver = '9';
-			$distid = 'fedora9';
-			$distbaseid = 'fedora';
-			swriteln("Operating System: Fedora 9 or compatible\n");
-		} elseif(stristr($content, 'Fedora release 10 (Cambridge)')) {
-			$distname = 'Fedora';
-			$distver = '10';
-			$distid = 'fedora9';
-			$distbaseid = 'fedora';
-			swriteln("Operating System: Fedora 10 or compatible\n");
-		} elseif(stristr($content, 'Fedora release 10')) {
-			$distname = 'Fedora';
-			$distver = '11';
-			$distid = 'fedora9';
-			$distbaseid = 'fedora';
-			swriteln("Operating System: Fedora 11 or compatible\n");
-		} elseif(stristr($content, 'Fedora release 32 (Thirty Two)')) {
-			$distname = 'Fedora';
-			$distver = '32';
-			$distid = 'fedora32';
-			$distbaseid = 'fedora';
-			swriteln("Operating System: Fedora 32 or compatible\n");
-		} elseif(stristr($content, 'Fedora release 33 (Thirty Three)')) {
-			$distname = 'Fedora';
-			$distver = '33';
-			$distid = 'fedora33';
-			$distbaseid = 'fedora';
-			swriteln("Operating System: Fedora 33 or compatible\n");
-		} elseif(stristr($content, 'CentOS release 5.2 (Final)')) {
-			$distname = 'CentOS';
-			$distver = '5.2';
-			$distid = 'centos52';
-			$distbaseid = 'fedora';
-			swriteln("Operating System: CentOS 5.2 or compatible\n");
-		} elseif(stristr($content, 'CentOS release 5.3 (Final)')) {
-			$distname = 'CentOS';
-			$distver = '5.3';
-			$distid = 'centos53';
-			$distbaseid = 'fedora';
-			swriteln("Operating System: CentOS 5.3 or compatible\n");
-		} elseif(stristr($content, 'CentOS release 5')) {
-			$distname = 'CentOS';
-			$distver = 'Unknown';
-			$distid = 'centos53';
-			$distbaseid = 'fedora';
-			swriteln("Operating System: CentOS 5 or compatible\n");
-		} elseif(stristr($content, 'CentOS Linux release 6') || stristr($content, 'CentOS release 6')) {
-			$distname = 'CentOS';
-			$distver = 'Unknown';
-			$distid = 'centos53';
-			$distbaseid = 'fedora';
-			swriteln("Operating System: CentOS 6 or compatible\n");
-		} elseif(stristr($content, 'CentOS Linux release 7')) {
-			$distname = 'CentOS';
-			$distver = 'Unknown';
-			$distbaseid = 'fedora';
-			$var=explode(" ", $content);
-			$var=explode(".", $var[3]);
-			$var=$var[0].".".$var[1];
-			if($var=='7.0' || $var=='7.1') {
-				$distid = 'centos70';
-			} else {
-				$distid = 'centos72';
-			}
-			swriteln("Operating System: CentOS $var\n");
-        } elseif(stristr($content, 'CentOS Linux release 8')) {
-			$distname = 'CentOS';
-			$distver = 'Unknown';
-			$distbaseid = 'fedora';
-			$distid = 'centos80';
-			$var=explode(" ", $content);
-			$var=explode(".", $var[3]);
-			$var=$var[0].".".$var[1];
-			swriteln("Operating System: CentOS $var\n");
-		} else {
-			$distname = 'Redhat';
-			$distver = 'Unknown';
-			$distid = 'fedora9';
-			$distbaseid = 'fedora';
-			swriteln("Operating System: Redhat or compatible, unknown version.\n");
+                if(stristr($prettyname[0], 'Fedora 32 (Thirty Two)')) {
+                        $distname = 'Fedora';
+                        $distver = '32';
+                        $distid = 'fedora32';
+                        $distbaseid = 'fedora';
+                        swriteln("Operating System: Fedora 32 or compatible\n");
+                } elseif(stristr($prettyname[0], 'Fedora 33 (Thirty Three)')) {
+                        $distname = 'Fedora';
+                        $distver = '33';
+                        $distid = 'fedora33';
+                        $distbaseid = 'fedora';
+                        swriteln("Operating System: Fedora 33 or compatible\n");
+                //** RHEL 7 and compatible clones
+                } elseif(preg_match('/^(?:7|7\.[0-9]{1,2})$/', $versionid[0])) {
+                        preg_match_all('/([0-9]{1,2})\.?([0-9]{0,2})\.?([0-9]*)/', file_get_contents('/etc/redhat-release'), $centos7_string);
+                        $distname = $name[0];
+                        $distver = is_array($centos7_string)? implode('.', array_filter(array($centos7_string[1][0],$centos7_string[2][0],$centos7_string[3][0]),'strlen')) : $version[0];
+                        $distid = 'centos72';
+                        $distbaseid = 'fedora';
+                        swriteln("Operating System: RHEL 7 or compatible\n");
+                //** RHEL 8 and compatible clones
+                } elseif(preg_match('/^(?:8|8\.[0-9]{1,2})$/', $versionid[0])) {
+                        $distname = $name[0];
+                        $distver = $version[0];
+                        $distid = 'centos80';
+                        $distbaseid = 'fedora';
+                        swriteln("Operating System: RHEL 8 or compatible\n");
+                } else {
+                        $distname = 'Redhat';
+                        $distver = 'Unknown';
+                        $distid = 'fedora9';
+                        $distbaseid = 'fedora';
+                        swriteln("Operating System: Redhat or compatible\n");
 		}
-	}
+	//** RHEL 6 and compatible clones
+        } elseif(file_exists('/etc/redhat-release') && !file_exists('/etc/os-release')) {
+
+                $content = file_get_contents('/etc/redhat-release');
+
+                if(stristr($content, 'CentOS Linux release 6') || stristr($content, 'CentOS release 6')) {
+                        $distname = 'CentOS';
+                        $distver = 'Unknown';
+                        $distid = 'centos53';
+                        $distbaseid = 'fedora';
+                        swriteln("Operating System: CentOS/RHEL 6 or compatible\n");
+                } else {
+                        $distname = 'Redhat';
+                        $distver = 'Unknown';
+                        $distid = 'fedora9';
+                        $distbaseid = 'fedora';
+                        swriteln("Operating System: Redhat or compatible\n");
+                }
+
+        }
 
 	//** Gentoo
 	elseif(file_exists('/etc/gentoo-release')) {

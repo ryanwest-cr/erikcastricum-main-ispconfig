@@ -314,6 +314,7 @@ class monitor_tools {
 			$distid = 'fedora9';
 			$distbaseid = 'fedora';
 		}
+        //** RHEL 6 and compatible clones
 	} elseif(file_exists('/etc/redhat-release') && !file_exists('/etc/os-release')) {
 
                 $content = file_get_contents('/etc/redhat-release');
