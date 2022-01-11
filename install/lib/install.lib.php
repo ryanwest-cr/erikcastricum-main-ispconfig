@@ -293,9 +293,11 @@ function get_distname() {
 
 	//** RHEL (including compatible clones) & Fedora
         elseif(file_exists('/etc/redhat-release') && file_exists('/etc/os-release')) {
-                $content = file_get_contents('/etc/os-release');
 
-                preg_match('/(?<=NAME=\").+?(?=\")/', $content, $name);
+		$content = file_get_contents('/etc/os-release');
+
+                preg_match('/(?<=PRETTY_NAME=\").+?(?=\")/', $content, $prettyname);
+		preg_match('/(?<=NAME=\").+?(?=\")/', $content, $name);
                 preg_match('/(?<=VERSION=\").+?(?=\")/', $content, $version);
                 preg_match('/(?<=VERSION_ID=\").+?(?=\")/', $content, $versionid);
 
@@ -318,14 +320,14 @@ function get_distname() {
                         $distver = is_array($centos7_string)? implode('.', array_filter(array($centos7_string[1][0],$centos7_string[2][0],$centos7_string[3][0]),'strlen')) : $version[0];
                         $distid = 'centos72';
                         $distbaseid = 'fedora';
-                        swriteln("Operating System: RHEL 7 or compatible\n");
+                        swriteln("Operating System: RHEL/CentOS 7 or compatible\n");
                 //** RHEL 8 and compatible clones
                 } elseif(preg_match('/^(?:8|8\.[0-9]{1,2})$/', $versionid[0])) {
                         $distname = $name[0];
                         $distver = $version[0];
                         $distid = 'centos80';
                         $distbaseid = 'fedora';
-                        swriteln("Operating System: RHEL 8 or compatible\n");
+                        swriteln("Operating System: RHEL/CentOS 8 or compatible\n");
                 } else {
                         $distname = 'Redhat';
                         $distver = 'Unknown';
