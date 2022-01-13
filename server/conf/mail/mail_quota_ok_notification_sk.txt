@@ -1,0 +1,14 @@
+MIME-Version: 1.0
+Content-type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+From: {admin_mail}
+Reply-To: {admin_mail}
+Subject: Veľkosť poštovej schránky ok
+
+Poštová schránka {email} už nie je blízko ani neprekračuje limit veľkosti.
+
+Poštová schránka:		{email}
+Meno:					{name}
+Využité miesto:			{used}
+Limit:					{quota}
+Percento využitia:		{ratio}
