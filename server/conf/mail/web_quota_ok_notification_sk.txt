@@ -1,0 +1,14 @@
+MIME-Version: 1.0
+Content-type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+From: {admin_mail}
+Reply-To: {admin_mail}
+Subject: Veľkosť webstránky ok
+
+Webstránka {domain} už nie je blízko ani neprekračuje limit veľkosti.
+
+Doména: 				{domain}
+Využité miesto:			{used}
+Mäkký limit:			{soft}
+Tvrdý limit:			{hard}
+Percento využitia:		{ratio}

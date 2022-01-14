@@ -57,55 +57,12 @@ class installer_dist extends installer_base {
 			$this->error("The postfix configuration directory '$config_dir' does not exist.");
 		}
 
-		//* mysql-virtual_domains.cf
-		$this->process_postfix_config('mysql-virtual_domains.cf');
+		//* Install virtual mappings
+		foreach (glob('tpl/mysql-virtual_*.master') as $filename) {
+			$this->process_postfix_config( basename($filename, '.master') );
+		}
 
-		//* mysql-virtual_forwardings.cf
-		$this->process_postfix_config('mysql-virtual_forwardings.cf');
-
-		//* mysql-virtual_alias_domains.cf
-		$this->process_postfix_config('mysql-virtual_alias_domains.cf');
-
-		//* mysql-virtual_alias_maps.cf
-		$this->process_postfix_config('mysql-virtual_alias_maps.cf');
-
-		//* mysql-virtual_mailboxes.cf
-		$this->process_postfix_config('mysql-virtual_mailboxes.cf');
-
-		//* mysql-virtual_email2email.cf
-		$this->process_postfix_config('mysql-virtual_email2email.cf');
-
-		//* mysql-virtual_transports.cf
-		$this->process_postfix_config('mysql-virtual_transports.cf');
-
-		//* mysql-virtual_recipient.cf
-		$this->process_postfix_config('mysql-virtual_recipient.cf');
-
-		//* mysql-virtual_sender.cf
-		$this->process_postfix_config('mysql-virtual_sender.cf');
-
-		//* mysql-virtual_sender_login_maps.cf
-		$this->process_postfix_config('mysql-virtual_sender_login_maps.cf');
-
-		//* mysql-virtual_client.cf
-		$this->process_postfix_config('mysql-virtual_client.cf');
-
-		//* mysql-virtual_relaydomains.cf
-		$this->process_postfix_config('mysql-virtual_relaydomains.cf');
-
-		//* mysql-virtual_relayrecipientmaps.cf
-		$this->process_postfix_config('mysql-virtual_relayrecipientmaps.cf');
-
-		//* mysql-virtual_policy_greylist.cf
-		$this->process_postfix_config('mysql-virtual_policy_greylist.cf');
-
-		//* mysql-virtual_gids.cf.master
-		$this->process_postfix_config('mysql-virtual_gids.cf');
-
-		//* mysql-virtual_uids.cf
-		$this->process_postfix_config('mysql-virtual_uids.cf');
-
-		//* mysql-virtual_alias_domains.cf
+		//* mysql-verify_recipients.cf
 		$this->process_postfix_config('mysql-verify_recipients.cf');
 
 		//* postfix-dkim
@@ -219,6 +176,7 @@ class installer_dist extends installer_base {
 		touch($config_dir.'/mime_header_checks');
 		touch($config_dir.'/nested_header_checks');
 		touch($config_dir.'/body_checks');
+		touch($config_dir.'/sasl_passwd');
 
 		//* Create the mailman files
 		if(!is_dir('/var/lib/mailman/data')) exec('mkdir -p /var/lib/mailman/data');
@@ -555,31 +513,28 @@ class installer_dist extends installer_base {
 
 		$config_dir = $conf['postfix']['config_dir'];
 
-		// Adding amavis-services to the master.cf file if the service does not already exists
-		$add_amavis = !$this->get_postfix_service('amavis','unix');
-		$add_amavis_10025 = !$this->get_postfix_service('127.0.0.1:10025','inet');
-		$add_amavis_10027 = !$this->get_postfix_service('127.0.0.1:10027','inet');
+		// Adding amavis-services to the master.cf file
 
-		if ($add_amavis || $add_amavis_10025 || $add_amavis_10027) {
-			//* backup master.cf
-			if(is_file($config_dir.'/master.cf')) copy($config_dir.'/master.cf', $config_dir.'/master.cf~');
-			// adjust amavis-config
-			if($add_amavis) {
-				$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis.master', 'tpl/master_cf_amavis.master');
-				af($config_dir.'/master.cf', $content);
-				unset($content);
-			}
-			if ($add_amavis_10025) {
-				$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis10025.master', 'tpl/master_cf_amavis10025.master');
-				af($config_dir.'/master.cf', $content);
-				unset($content);
-			}
-			if ($add_amavis_10027) {
-				$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis10027.master', 'tpl/master_cf_amavis10027.master');
-				af($config_dir.'/master.cf', $content);
-				unset($content);
-			}
-		}
+		// backup master.cf
+		if(is_file($config_dir.'/master.cf')) copy($config_dir.'/master.cf', $config_dir.'/master.cf~');
+
+		// first remove the old service definitions
+		$this->remove_postfix_service('amavis','unix');
+		$this->remove_postfix_service('127.0.0.1:10025','inet');
+		$this->remove_postfix_service('127.0.0.1:10027','inet');
+
+		// then add them back
+		$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis.master', 'tpl/master_cf_amavis.master');
+		af($config_dir.'/master.cf', $content);
+		unset($content);
+
+		$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis10025.master', 'tpl/master_cf_amavis10025.master');
+		af($config_dir.'/master.cf', $content);
+		unset($content);
+
+		$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis10027.master', 'tpl/master_cf_amavis10027.master');
+		af($config_dir.'/master.cf', $content);
+		unset($content);
 
 		// Add the clamav user to the vscan group
 		//exec('groupmod --add-user clamav vscan');

@@ -1,0 +1,13 @@
+MIME-Version: 1.0
+Content-type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+From: {admin_mail}
+Reply-To: {admin_mail}
+Subject: Upozornenie na veľkosť databázy
+
+Databáza {database_name} je blízko alebo prekročila limit veľkosti.
+
+Databáza:			{database_name}
+Využité miesto:		{used}
+Limit:				{quota}
+Percento využitia:	{ratio}

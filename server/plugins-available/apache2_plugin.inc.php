@@ -278,7 +278,6 @@ class apache2_plugin {
 		$ssl_dir = $data['new']['document_root'].'/ssl';
 		$domain = ($data['new']['ssl_domain'] != '') ? $data['new']['ssl_domain'] : $data['new']['domain'];
 		$key_file = $ssl_dir.'/'.$domain.'.key';
-		$key_file2 = $ssl_dir.'/'.$domain.'.key.org';
 		$csr_file = $ssl_dir.'/'.$domain.'.csr';
 		$crt_file = $ssl_dir.'/'.$domain.'.crt';
 		$bundle_file = $ssl_dir.'/'.$domain.'.bundle';
@@ -292,10 +291,6 @@ class apache2_plugin {
 			if(file_exists($key_file)){
 				$app->system->rename($key_file, $key_file.'.bak');
 				$app->system->chmod($key_file.'.bak', 0400);
-			}
-			if(file_exists($key_file2)){
-				$app->system->rename($key_file2, $key_file2.'.bak');
-				$app->system->chmod($key_file2.'.bak', 0400);
 			}
 			if(file_exists($csr_file)) $app->system->rename($csr_file, $csr_file.'.bak');
 			if(file_exists($crt_file)) $app->system->rename($crt_file, $crt_file.'.bak');
@@ -346,27 +341,19 @@ class apache2_plugin {
 			$ssl_ext_file = $ssl_dir.'/v3.ext';
 			$app->system->file_put_contents($ssl_ext_file, $ext_cnf);
 
-			$rand_file = $rand_file;
-			$key_file2 = $key_file2;
-			$openssl_cmd_key_file2 = $key_file2;
-			if(substr($domain, 0, 2) == '*.' && strpos($key_file2, '/ssl/\*.') !== false) $key_file2 = str_replace('/ssl/\*.', '/ssl/*.', $key_file2); // wildcard certificate
-			$key_file = $key_file;
 			$openssl_cmd_key_file = $key_file;
 			if(substr($domain, 0, 2) == '*.' && strpos($key_file, '/ssl/\*.') !== false) $key_file = str_replace('/ssl/\*.', '/ssl/*.', $key_file); // wildcard certificate
 			$ssl_days = 3650;
-			$csr_file = $csr_file;
 			$openssl_cmd_csr_file = $csr_file;
 			if(substr($domain, 0, 2) == '*.' && strpos($csr_file, '/ssl/\*.') !== false) $csr_file = str_replace('/ssl/\*.', '/ssl/*.', $csr_file); // wildcard certificate
 			$config_file = $ssl_cnf_file;
-			$crt_file = $crt_file;
 			$openssl_cmd_crt_file = $crt_file;
 			if(substr($domain, 0, 2) == '*.' && strpos($crt_file, '/ssl/\*.') !== false) $crt_file = str_replace('/ssl/\*.', '/ssl/*.', $crt_file); // wildcard certificate
 
 			if(is_file($ssl_cnf_file) && !is_link($ssl_cnf_file)) {
-
-				$app->system->exec_safe("openssl genrsa -des3 -rand ? -passout pass:? -out ? 2048", $rand_file, $ssl_password, $openssl_cmd_key_file2);
-				$app->system->exec_safe("openssl req -new -sha256 -passin pass:? -passout pass:? -key ? -out ? -days ? -config ?", $ssl_password, $ssl_password, $openssl_cmd_key_file2, $openssl_cmd_csr_file, $ssl_days, $config_file);
-				$app->system->exec_safe("openssl rsa -passin pass:? -in ? -out ?", $ssl_password, $openssl_cmd_key_file2, $openssl_cmd_key_file);
+				$openssl_cmd = 'openssl req -nodes -newkey rsa:4096 -x509 -days ? -keyout ? -out ? -config ?';
+				$app->system->exec_safe($openssl_cmd, $ssl_days, $openssl_cmd_key_file, $openssl_cmd_crt_file, $config_file);
+				$app->system->exec_safe("openssl req -new -sha256 -key ? -out ? -days ? -config ?", $openssl_cmd_key_file, $openssl_cmd_csr_file, $ssl_days, $config_file);
 
 				if(file_exists($web_config['CA_path'].'/openssl.cnf'))
 				{
@@ -375,15 +362,14 @@ class apache2_plugin {
 					if(filesize($crt_file) == 0 || !file_exists($crt_file)) {
 						$app->log("CA-Certificate signing failed.  openssl ca -out $openssl_cmd_crt_file -config " . $web_config['CA_path'] . "/openssl.cnf -passin pass:" . $web_config['CA_pass'] . " -in $openssl_cmd_csr_file -extfile $ssl_ext_file", LOGLEVEL_ERROR);
 					}
-				};
+				}
 				if (@filesize($crt_file)==0 || !file_exists($crt_file)){
-					$app->system->exec_safe("openssl req -x509 -passin pass:? -passout pass:? -key ? -in ? -out ? -days ? -config ? ", $ssl_password, $ssl_password, $openssl_cmd_key_file2, $openssl_cmd_csr_file, $openssl_cmd_crt_file, $ssl_days, $config_file);
+					$app->system->exec_safe($openssl_cmd, $ssl_days, $openssl_cmd_key_file, $openssl_cmd_crt_file, $config_file);
 					$app->log("Creating self-signed SSL Cert for: $domain", LOGLEVEL_DEBUG);
-				};
+				}
 
 			}
 
-			$app->system->chmod($key_file2, 0400);
 			$app->system->chmod($key_file, 0400);
 			@$app->system->unlink($config_file);
 			@$app->system->unlink($rand_file);
@@ -444,10 +430,6 @@ class apache2_plugin {
 			if(file_exists($key_file)){
 				$app->system->copy($key_file, $key_file.'~');
 				$app->system->chmod($key_file.'~', 0400);
-			}
-			if(file_exists($key_file2)){
-				$app->system->copy($key_file2, $key_file2.'~');
-				$app->system->chmod($key_file2.'~', 0400);
 			}
 			if(file_exists($csr_file)) $app->system->copy($csr_file, $csr_file.'~');
 			if(file_exists($crt_file)) $app->system->copy($crt_file, $crt_file.'~');
@@ -551,7 +533,7 @@ class apache2_plugin {
 		$app->uses('getconf');
 		$web_config = $app->getconf->get_server_config($conf['server_id'], 'web');
 
-		//* Check if this is a chrooted setup
+		//* Check if apache is using a chrooted setup
 		if($web_config['website_basedir'] != '' && @is_file($web_config['website_basedir'].'/etc/passwd')) {
 			$apache_chrooted = true;
 			$app->log('Info: Apache is chrooted.', LOGLEVEL_DEBUG);
@@ -565,7 +547,7 @@ class apache2_plugin {
 		}
 		if($app->system->is_allowed_user($data['new']['system_user'], $app->system->is_user($data['new']['system_user']), true) == false
 			|| $app->system->is_allowed_group($data['new']['system_group'], $app->system->is_group($data['new']['system_group']), true) == false) {
-			$app->log('Websites cannot be owned by the root user or group. User: '.$data['new']['system_user'].' Group: '.$data['new']['system_group'], LOGLEVEL_WARN);
+			$app->log('Problem with website user or group.  Websites cannot be owned by root or an existing user/group. User: '.$data['new']['system_user'].' Group: '.$data['new']['system_group'], LOGLEVEL_WARN);
 			return 0;
 		}
 		if(trim($data['new']['domain']) == '') {
@@ -659,7 +641,7 @@ class apache2_plugin {
 					$tmp_symlink = str_replace('[website_domain]', $data['old']['domain'], $tmp_symlink);
 					// Remove trailing slash
 					if(substr($tmp_symlink, -1, 1) == '/') $tmp_symlink = substr($tmp_symlink, 0, -1);
-					// create the symlinks, if not exist
+					// remove the old symlinks if they exist
 					if(is_link($tmp_symlink)) {
 						$app->system->exec_safe('rm -f ?', $tmp_symlink);
 						$app->log('Removed symlink: rm -f '.$tmp_symlink, LOGLEVEL_DEBUG);
@@ -692,9 +674,7 @@ class apache2_plugin {
 
 				//* Create new base directory, if it does not exist yet
 				if(!is_dir($new_dir)) $app->system->mkdirpath($new_dir);
-				$app->system->web_folder_protection($data['old']['document_root'], false);
 				$app->system->exec_safe('mv ? ?', $data['old']['document_root'], $new_dir);
-				//$app->system->rename($data['old']['document_root'],$new_dir);
 				$app->log('Moving site to new document root: mv '.$data['old']['document_root'].' '.$new_dir, LOGLEVEL_DEBUG);
 
 				// Handle the change in php_open_basedir
@@ -714,15 +694,6 @@ class apache2_plugin {
 			if($apache_chrooted) $app->system->exec_safe('chroot ? ?', $web_config['website_basedir'], $command);
 
 			//* Change the log mount
-			/*
-			$fstab_line = '/var/log/ispconfig/httpd/'.$data['old']['domain'].' '.$data['old']['document_root'].'/'.$old_log_folder.'    none    bind';
-			$app->system->removeLine('/etc/fstab', $fstab_line);
-			$fstab_line = '/var/log/ispconfig/httpd/'.$data['old']['domain'].' '.$data['old']['document_root'].'/'.$old_log_folder.'    none    bind,nobootwait';
-			$app->system->removeLine('/etc/fstab', $fstab_line);
-			$fstab_line = '/var/log/ispconfig/httpd/'.$data['old']['domain'].' '.$data['old']['document_root'].'/'.$old_log_folder.'    none    bind,nobootwait';
-			$app->system->removeLine('/etc/fstab', $fstab_line);
-			*/
-
 			$fstab_line_old = '/var/log/ispconfig/httpd/'.$data['old']['domain'].' '.$data['old']['document_root'].'/'.$old_log_folder.'    none    bind';
 
 			if($web_config['network_filesystem'] == 'y') {
@@ -736,8 +707,6 @@ class apache2_plugin {
 			$app->system->exec_safe('mount --bind ? ?', '/var/log/ispconfig/httpd/'.$data['new']['domain'], $data['new']['document_root'].'/'.$log_folder);
 
 		}
-
-		//print_r($data);
 
 		// Check if the directories are there and create them if necessary.
 		$app->system->web_folder_protection($data['new']['document_root'], false);
@@ -788,17 +757,22 @@ class apache2_plugin {
 		$last_updated = array_unique($last_updated, SORT_REGULAR);
 		sort($last_updated, SORT_STRING);
 		$update_hash = hash('md5', implode(' ', $last_updated));
+		$check_for_jailkit_updates=false;
 
-		// Create jailkit chroot when enabling php_fpm_chroot
-		if($data['new']['php_fpm_chroot'] == 'y' && $data['old']['php_fpm_chroot'] != 'y') {
+		$create_jail_conditions= ($data['old']['php_fpm_chroot'] != 'y' ||
+			! is_dir($data['new']['document_root'].'/etc/jailkit') ||
+			($data['old']['php'] != $data['new']['php'] && $data['new']['php'] != 'no'));
+
+		// Create jailkit chroot if needed and when enabling php_fpm_chroot
+		if($data['new']['php_fpm_chroot'] == 'y' && $create_jail_conditions && $data['new']['php'] != 'no') {
 			$website = $app->db->queryOneRecord('SELECT * FROM web_domain WHERE domain_id = ?', $data['new']['domain_id']);
 			$this->website = array_merge($website, $data['new'], array('new_jailkit_hash' => $update_hash));
 			$this->jailkit_config = $jailkit_config;
 			$this->_setup_jailkit_chroot();
 			$this->_add_jailkit_user();
-			$check_for_jailkit_updates=false;
 		// else delete if unused
-		} elseif ($data['new']['delete_unused_jailkit'] == 'y' && $data['new']['php_fpm_chroot'] != 'y') {
+		} elseif (($data['new']['delete_unused_jailkit'] == 'y' && $data['new']['php_fpm_chroot'] != 'y') ||
+			($data['new']['delete_unused_jailkit'] == 'y' && $data['new']['php'] == 'no')) {
 			$check_for_jailkit_updates=false;
 			$this->_delete_jailkit_if_unused($data['new']['domain_id']);
 			if(is_dir($data['new']['document_root'].'/etc/jailkit')) {
@@ -892,7 +866,7 @@ class apache2_plugin {
 					$tmp_symlink = str_replace('[website_domain]', $data['old']['domain'], $tmp_symlink);
 					// Remove trailing slash
 					if(substr($tmp_symlink, -1, 1) == '/') $tmp_symlink = substr($tmp_symlink, 0, -1);
-					// remove the symlinks, if not exist
+					// remove the old symlinks if they exist
 					if(is_link($tmp_symlink)) {
 						$app->system->exec_safe('rm -f ?', $tmp_symlink);
 						$app->log('Removed symlink: rm -f '.$tmp_symlink, LOGLEVEL_DEBUG);
@@ -953,11 +927,11 @@ class apache2_plugin {
 				$app->system->exec_safe('chmod -R a+r ?', $error_page_path);
 			}
 
-			//* Copy the web skeleton files only when there is no index.ph or index.html file yet
-			if(!file_exists($data['new']['document_root'].'/'.$web_folder.'/index.html') && !file_exists($data['new']['document_root'].'/'.$web_folder.'/index.php')) {
+			//* Copy the web skeleton files only when there is no index.php, standard_index.html or index.html file yet
+			if(!file_exists($data['new']['document_root'].'/'.$web_folder.'/index.html') && !file_exists($data['new']['document_root'].'/'.$web_folder.'/index.php') && !file_exists($data['new']['document_root'].'/'.$web_folder.'/standard_index.html')) {
 				if (file_exists($conf['rootpath'] . '/conf-custom/index/standard_index.html_'.substr($conf['language'], 0, 2))) {
-					if(!file_exists($data['new']['document_root'] . '/' . $web_folder . '/index.html')) {
-						$app->system->exec_safe('cp ? ?', $conf['rootpath'] . '/conf-custom/index/standard_index.html_' . substr($conf['language'], 0, 2), $data['new']['document_root'] . '/' . $web_folder . '/index.html');
+					if(!file_exists($data['new']['document_root'] . '/' . $web_folder . '/standard_index.html')) {
+						$app->system->exec_safe('cp ? ?', $conf['rootpath'] . '/conf-custom/index/standard_index.html_' . substr($conf['language'], 0, 2), $data['new']['document_root'] . '/' . $web_folder . '/standard_index.html');
 					}
 
 					if(is_file($conf['rootpath'] . '/conf-custom/index/favicon.ico')) {
@@ -968,13 +942,13 @@ class apache2_plugin {
 					}
 				} else {
 					if (file_exists($conf['rootpath'] . '/conf-custom/index/standard_index.html')) {
-						if(!file_exists($data['new']['document_root'].'/' . $web_folder . '/index.html')) $app->system->exec_safe('cp ? ?', $conf['rootpath'] . '/conf-custom/index/standard_index.html', $data['new']['document_root'].'/' . $web_folder . '/index.html');
+						if(!file_exists($data['new']['document_root'].'/' . $web_folder . '/standard_index.html')) $app->system->exec_safe('cp ? ?', $conf['rootpath'] . '/conf-custom/index/standard_index.html', $data['new']['document_root'].'/' . $web_folder . '/standard_index.html');
 					} else {
-						if(!file_exists($data['new']['document_root'].'/' . $web_folder . '/index.html')) $app->system->exec_safe('cp ? ?', $conf['rootpath'] . '/conf/index/standard_index.html_'.substr($conf['language'], 0, 2), $data['new']['document_root'].'/' . $web_folder . '/index.html');
-						if(is_file($conf['rootpath'] . '/conf/index/favicon.ico')){
+						if(!file_exists($data['new']['document_root'].'/' . $web_folder . '/standard_index.html')) $app->system->exec_safe('cp ? ?', $conf['rootpath'] . '/conf/index/standard_index.html_'.substr($conf['language'], 0, 2), $data['new']['document_root'].'/' . $web_folder . '/standard_index.html');
+						if(is_file($conf['rootpath'] . '/conf/index/favicon.ico')) {
 							if(!file_exists($data['new']['document_root'].'/' . $web_folder . '/favicon.ico')) $app->system->exec_safe('cp ? ?', $conf['rootpath'] . '/conf/index/favicon.ico', $data['new']['document_root'].'/' . $web_folder . '/');
 						}
-						if(is_file($conf['rootpath'] . '/conf/index/robots.txt')){
+						if(is_file($conf['rootpath'] . '/conf/index/robots.txt')) {
 							if(!file_exists($data['new']['document_root'].'/' . $web_folder . '/robots.txt')) $app->system->exec_safe('cp ? ?', $conf['rootpath'] . '/conf/index/robots.txt', $data['new']['document_root'].'/' . $web_folder . '/');
 						}
 					}
@@ -1195,7 +1169,7 @@ class apache2_plugin {
 			$app->system->chgrp('/var/log/ispconfig/httpd/'.$data['new']['domain'].'/error.log', 'root');
 		}
 
-		//* Write the custom php.ini file, if custom_php_ini fieled is not empty
+		//* Write the custom php.ini file, if custom_php_ini field is not empty
 		$custom_php_ini_dir = $web_config['website_basedir'].'/conf/'.$data['new']['system_user'];
 		if($data['new']['type'] == 'vhostsubdomain' || $data['new']['type'] == 'vhostalias') $custom_php_ini_dir .= '_' . $web_folder;
 		if(!is_dir($web_config['website_basedir'].'/conf')) $app->system->mkdir($web_config['website_basedir'].'/conf');
@@ -1315,7 +1289,6 @@ class apache2_plugin {
 		$tmp = $app->letsencrypt->get_website_certificate_paths($data);
 		$domain = $tmp['domain'];
 		$key_file = $tmp['key'];
-		$key_file2 = $tmp['key2'];
 		$csr_file = $tmp['csr'];
 		$crt_file = $tmp['crt'];
 		$bundle_file = $tmp['bundle'];
@@ -1399,12 +1372,14 @@ class apache2_plugin {
 				$rewrite_rules[] = array('rewrite_domain'  => '^'.$this->_rewrite_quote($data['new']['domain']),
 					'rewrite_type'   => ($data['new']['redirect_type'] == 'no')?'':'['.$data['new']['redirect_type'].']',
 					'rewrite_target'  => $rewrite_target,
+					'rewrite_target_is_ssl' => ('https://' === substr($rewrite_target, 0, 8) ? 'y' : 'n'),
 					'rewrite_target_ssl' => $rewrite_target_ssl,
 					'rewrite_is_url'    => ($this->_is_url($rewrite_target) ? 'y' : 'n'),
 					'rewrite_add_path' => (substr($rewrite_target, -1) == '/' ? 'y' : 'n'));
 				$rewrite_rules[] = array('rewrite_domain'  => '^' . $this->_rewrite_quote('www.'.$data['new']['domain']),
 					'rewrite_type'   => ($data['new']['redirect_type'] == 'no')?'':'['.$data['new']['redirect_type'].']',
 					'rewrite_target'  => $rewrite_target,
+					'rewrite_target_is_ssl' => ('https://' === substr($rewrite_target, 0, 8) ? 'y' : 'n'),
 					'rewrite_target_ssl' => $rewrite_target_ssl,
 					'rewrite_is_url'    => ($this->_is_url($rewrite_target) ? 'y' : 'n'),
 					'rewrite_add_path' => (substr($rewrite_target, -1) == '/' ? 'y' : 'n'));
@@ -1413,6 +1388,7 @@ class apache2_plugin {
 				$rewrite_wildcard_rules[] = array( 'rewrite_domain'  => '(^|\.)'.$this->_rewrite_quote($data['new']['domain']),
 					'rewrite_type'   => ($data['new']['redirect_type'] == 'no')?'':'['.$data['new']['redirect_type'].']',
 					'rewrite_target'  => $rewrite_target,
+					'rewrite_target_is_ssl' => ('https://' === substr($rewrite_target, 0, 8) ? 'y' : 'n'),
 					'rewrite_target_ssl' => $rewrite_target_ssl,
 					'rewrite_is_url'    => ($this->_is_url($rewrite_target) ? 'y' : 'n'),
 					'rewrite_add_path' => (substr($rewrite_target, -1) == '/' ? 'y' : 'n'));
@@ -1421,6 +1397,7 @@ class apache2_plugin {
 				$rewrite_rules[] = array( 'rewrite_domain'  => '^'.$this->_rewrite_quote($data['new']['domain']),
 					'rewrite_type'   => ($data['new']['redirect_type'] == 'no')?'':'['.$data['new']['redirect_type'].']',
 					'rewrite_target'  => $rewrite_target,
+					'rewrite_target_is_ssl' => ('https://' === substr($rewrite_target, 0, 8) ? 'y' : 'n'),
 					'rewrite_target_ssl' => $rewrite_target_ssl,
 					'rewrite_is_url'    => ($this->_is_url($rewrite_target) ? 'y' : 'n'),
 					'rewrite_add_path' => (substr($rewrite_target, -1) == '/' ? 'y' : 'n'));
@@ -1676,7 +1653,7 @@ class apache2_plugin {
 					$custom_php_fpm_ini_dir = $tmp_php['php_fpm_ini_dir'];
 					$custom_php_fpm_init_script = $tmp_php['php_fpm_init_script'];
 					$custom_php_fpm_pool_dir = $tmp_php['php_fpm_pool_dir'];
-					$custom_php_fpm_socket_dir = $tmp_php['custom_php_fpm_socket_dir'];
+					$custom_php_fpm_socket_dir = $tmp_php['php_fpm_socket_dir'];
 					if(substr($custom_php_fpm_ini_dir, -1) != '/') $custom_php_fpm_ini_dir .= '/';
 				}
 			}
@@ -1688,7 +1665,7 @@ class apache2_plugin {
 					$custom_php_fpm_ini_dir = $tmp_php['php_fpm_ini_dir'];
 					$custom_php_fpm_init_script = $tmp_php['php_fpm_init_script'];
 					$custom_php_fpm_pool_dir = $tmp_php['php_fpm_pool_dir'];
-					$custom_php_fpm_socket_dir = $tmp_php['custom_php_fpm_socket_dir'];
+					$custom_php_fpm_socket_dir = $tmp_php['php_fpm_socket_dir'];
 					if(substr($custom_php_fpm_ini_dir, -1) != '/') $custom_php_fpm_ini_dir .= '/';
 				}
 			}
@@ -2093,17 +2070,12 @@ class apache2_plugin {
 						$app->system->copy($key_file, $key_file.'.err');
 						$app->system->chmod($key_file.'.err', 0400);
 					}
-					if(is_file($key_file2)){
-						$app->system->copy($key_file2, $key_file2.'.err');
-						$app->system->chmod($key_file2.'.err', 0400);
-					}
 					if(is_file($csr_file)) $app->system->copy($csr_file, $csr_file.'.err');
 					if(is_file($crt_file)) $app->system->copy($crt_file, $crt_file.'.err');
 					if(is_file($bundle_file)) $app->system->copy($bundle_file, $bundle_file.'.err');
 
 					//* Restore the ~ backup files
 					if(is_file($key_file.'~')) $app->system->copy($key_file.'~', $key_file);
-					if(is_file($key_file2.'~')) $app->system->copy($key_file2.'~', $key_file2);
 					if(is_file($crt_file.'~')) $app->system->copy($crt_file.'~', $crt_file);
 					if(is_file($csr_file.'~')) $app->system->copy($csr_file.'~', $csr_file);
 					if(is_file($bundle_file.'~')) $app->system->copy($bundle_file.'~', $bundle_file);
@@ -2128,7 +2100,6 @@ class apache2_plugin {
 		$this->ssl_certificate_changed = false;
 
 		if(@is_file($key_file.'~')) $app->system->unlink($key_file.'~');
-		if(@is_file($key_file2.'~')) $app->system->unlink($key_file2.'~');
 		if(@is_file($crt_file.'~')) $app->system->unlink($crt_file.'~');
 		if(@is_file($csr_file.'~')) $app->system->unlink($csr_file.'~');
 		if(@is_file($bundle_file.'~')) $app->system->unlink($bundle_file.'~');
@@ -3820,7 +3791,7 @@ class apache2_plugin {
 		}
 
 		// chroot is used by php-fpm
-		if (isset($parent_domain['php_fpm_chroot']) && $parent_domain['php_fpm_chroot'] == 'y') {
+		if (isset($parent_domain['php_fpm_chroot']) && $parent_domain['php_fpm_chroot'] == 'y' && $parent_domain['php'] != 'no') {
 			return;
 		}
 

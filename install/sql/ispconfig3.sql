@@ -178,12 +178,15 @@ CREATE TABLE `client` (
   `limit_mailforward` int(11) NOT NULL DEFAULT '-1',
   `limit_mailcatchall` int(11) NOT NULL DEFAULT '-1',
   `limit_mailrouting` int(11) NOT NULL DEFAULT '0',
+  `limit_mail_wblist` int(11) NOT NULL DEFAULT '0',
   `limit_mailfilter` int(11) NOT NULL DEFAULT '-1',
   `limit_fetchmail` int(11) NOT NULL DEFAULT '-1',
   `limit_mailquota` int(11) NOT NULL DEFAULT '-1',
   `limit_spamfilter_wblist` int(11) NOT NULL DEFAULT '0',
   `limit_spamfilter_user` int(11) NOT NULL DEFAULT '0',
   `limit_spamfilter_policy` int(11) NOT NULL DEFAULT '0',
+  `limit_mail_backup` ENUM( 'n', 'y' ) NOT NULL DEFAULT 'y',
+  `limit_relayhost` ENUM( 'n', 'y' ) NOT NULL DEFAULT 'n',
   `default_xmppserver` int(11) unsigned NOT NULL DEFAULT '1',
   `xmpp_servers` text,
   `limit_xmpp_domain` int(11) NOT NULL DEFAULT '-1',
@@ -309,12 +312,15 @@ CREATE TABLE `client_template` (
   `limit_mailforward` int(11) NOT NULL default '-1',
   `limit_mailcatchall` int(11) NOT NULL default '-1',
   `limit_mailrouting` int(11) NOT NULL default '0',
+  `limit_mail_wblist` int(11) NOT NULL default '0',
   `limit_mailfilter` int(11) NOT NULL default '-1',
   `limit_fetchmail` int(11) NOT NULL default '-1',
   `limit_mailquota` int(11) NOT NULL default '-1',
   `limit_spamfilter_wblist` int(11) NOT NULL default '0',
   `limit_spamfilter_user` int(11) NOT NULL default '0',
   `limit_spamfilter_policy` int(11) NOT NULL default '0',
+  `limit_mail_backup` ENUM( 'n', 'y' ) NOT NULL DEFAULT 'y',
+  `limit_relayhost` ENUM( 'n', 'y' ) NOT NULL DEFAULT 'n',
   `default_xmppserver` int(11) unsigned NOT NULL DEFAULT '1',
   `xmpp_servers` text,
   `limit_xmpp_domain` int(11) NOT NULL DEFAULT '-1',
@@ -821,7 +827,7 @@ CREATE TABLE `mail_access` (
   `type` set('recipient','sender','client') NOT NULL DEFAULT 'recipient',
   `active` enum('n','y') NOT NULL default 'y',
   PRIMARY KEY  (`access_id`),
-  KEY `server_id` (`server_id`,`source`)
+  UNIQUE KEY `unique_source` (`server_id`,`source`,`type`)
 ) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
 -- --------------------------------------------------------
@@ -883,6 +889,9 @@ CREATE TABLE `mail_domain` (
   `dkim_selector` varchar(63) NOT NULL DEFAULT 'default',
   `dkim_private` mediumtext NULL,
   `dkim_public` mediumtext NULL,
+  `relay_host` varchar(255) NOT NULL DEFAULT '',
+  `relay_user` varchar(255) NOT NULL DEFAULT '',
+  `relay_pass` varchar(255) NOT NULL DEFAULT '',
   `active` enum('n','y') NOT NULL DEFAULT 'n',
   PRIMARY KEY  (`domain_id`),
   KEY `server_id` (`server_id`,`domain`),
@@ -910,7 +919,7 @@ CREATE TABLE `mail_forwarding` (
   `allow_send_as` ENUM('n','y') NOT NULL DEFAULT 'n',
   `greylisting` enum('n','y' ) NOT NULL DEFAULT 'n',
   PRIMARY KEY  (`forwarding_id`),
-  KEY `server_id` (`server_id`,`source`),
+  KEY `server_id` (`server_id`, `source`),
   KEY `type` (`type`)
 ) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
@@ -958,6 +967,27 @@ CREATE TABLE `mail_mailinglist` (
   `email` varchar(255) NOT NULL DEFAULT '',
   `password` varchar(255) NOT NULL DEFAULT '',
   PRIMARY KEY  (`mailinglist_id`)
+) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for Table `mail_relay_domain`
+--
+
+CREATE TABLE IF NOT EXISTS `mail_relay_domain` (
+  `relay_domain_id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `sys_userid` int(11) NOT NULL DEFAULT '0',
+  `sys_groupid` int(11) NOT NULL DEFAULT '0',
+  `sys_perm_user` varchar(5) DEFAULT NULL,
+  `sys_perm_group` varchar(5) DEFAULT NULL,
+  `sys_perm_other` varchar(5) DEFAULT NULL,
+  `server_id` int(11) NOT NULL DEFAULT '0',
+  `domain` varchar(255) DEFAULT NULL,
+  `access` varchar(255) NOT NULL DEFAULT 'OK',
+  `active` varchar(255) NOT NULL DEFAULT 'y',
+  PRIMARY KEY (`relay_domain_id`),
+  UNIQUE KEY `domain` (`domain`, `server_id`)
 ) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
 -- --------------------------------------------------------
@@ -1015,7 +1045,7 @@ CREATE TABLE `mail_transport` (
   `active` enum('n','y') NOT NULL DEFAULT 'n',
   PRIMARY KEY  (`transport_id`),
   KEY `server_id` (`server_id`,`transport`),
-  KEY `server_id_2` (`server_id`,`domain`)
+  UNIQUE KEY `server_id_2` (`server_id`, `domain`)
 ) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
 -- --------------------------------------------------------
@@ -1309,6 +1339,7 @@ CREATE TABLE `remote_session` (
   `remote_functions` text,
   `client_login` tinyint(1) unsigned NOT NULL default '0',
   `tstamp` int(10) unsigned NOT NULL DEFAULT '0',
+  `remote_ip` varchar(39) NOT NULL DEFAULT '',
   PRIMARY KEY  (`remote_session`)
 ) DEFAULT CHARSET=utf8 ;
 
@@ -1464,88 +1495,6 @@ CREATE TABLE `shell_user` (
 -- --------------------------------------------------------
 
 --
--- Table structure for table  `software_package`
---
-
-CREATE TABLE `software_package` (
-  `package_id` int(11) unsigned NOT NULL auto_increment,
-  `software_repo_id` int(11) unsigned NOT NULL DEFAULT '0',
-  `package_name` varchar(64) NOT NULL DEFAULT '',
-  `package_title` varchar(64) NOT NULL DEFAULT '',
-  `package_description` text,
-  `package_version` varchar(8) default NULL,
-  `package_type` enum('ispconfig','app','web') NOT NULL default 'app',
-  `package_installable` enum('yes','no','key') NOT NULL default 'yes',
-  `package_requires_db` enum('no','mysql') NOT NULL default 'no',
-  `package_remote_functions` text,
-  `package_key` varchar(255) NOT NULL DEFAULT '',
-  `package_config` text,
-  PRIMARY KEY  (`package_id`),
-  UNIQUE KEY `package_name` (`package_name`)
-) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
-
--- --------------------------------------------------------
-
---
--- Table structure for table  `software_repo`
---
-
-CREATE TABLE `software_repo` (
-  `software_repo_id` int(11) unsigned NOT NULL auto_increment,
-  `sys_userid` int(11) unsigned NOT NULL default '0',
-  `sys_groupid` int(11) unsigned NOT NULL default '0',
-  `sys_perm_user` varchar(5) default NULL,
-  `sys_perm_group` varchar(5) default NULL,
-  `sys_perm_other` varchar(5) default NULL,
-  `repo_name` varchar(64) default NULL,
-  `repo_url` varchar(255) default NULL,
-  `repo_username` varchar(64) default NULL,
-  `repo_password` varchar(64) default NULL,
-  `active` enum('n','y') NOT NULL default 'y',
-  PRIMARY KEY  (`software_repo_id`)
-) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
-
--- --------------------------------------------------------
-
---
--- Table structure for table  `software_update`
---
-
-CREATE TABLE `software_update` (
-  `software_update_id` int(11) unsigned NOT NULL auto_increment,
-  `software_repo_id` int(11) unsigned NOT NULL DEFAULT '0',
-  `package_name` varchar(64) NOT NULL DEFAULT '',
-  `update_url` varchar(255) NOT NULL DEFAULT '',
-  `update_md5` varchar(255) NOT NULL DEFAULT '',
-  `update_dependencies` varchar(255) NOT NULL DEFAULT '',
-  `update_title` varchar(64) NOT NULL DEFAULT '',
-  `v1` tinyint(1) NOT NULL default '0',
-  `v2` tinyint(1) NOT NULL default '0',
-  `v3` tinyint(1) NOT NULL default '0',
-  `v4` tinyint(1) NOT NULL default '0',
-  `type` enum('full','update') NOT NULL default 'full',
-  PRIMARY KEY  (`software_update_id`)
-) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
-
--- --------------------------------------------------------
-
---
--- Table structure for table  `software_update_inst`
---
-
-CREATE TABLE `software_update_inst` (
-  `software_update_inst_id` int(11) unsigned NOT NULL auto_increment,
-  `software_update_id` int(11) unsigned NOT NULL default '0',
-  `package_name` varchar(64) NOT NULL DEFAULT '',
-  `server_id` int(11) unsigned NOT NULL DEFAULT '0',
-  `status` enum('none','installing','installed','deleting','deleted','failed') NOT NULL default 'none',
-  PRIMARY KEY  (`software_update_inst_id`),
-  UNIQUE KEY `software_update_id` (`software_update_id`,`package_name`,`server_id`)
-) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
-
--- --------------------------------------------------------
-
---
 -- Table structure for table  `spamfilter_policy`
 --
 
@@ -1621,7 +1570,7 @@ CREATE TABLE `spamfilter_users` (
   `sys_perm_other` varchar(5) NOT NULL DEFAULT '',
   `server_id` int(11) unsigned NOT NULL DEFAULT '0',
   `priority` tinyint(3) unsigned NOT NULL default '7',
-  `policy_id` int(11) unsigned NOT NULL default '1',
+  `policy_id` int(11) unsigned NOT NULL default '0',
   `email` varchar(255) NOT NULL DEFAULT '',
   `fullname` varchar(64) default NULL,
   `local` varchar(1) default NULL,
@@ -2486,7 +2435,7 @@ INSERT INTO `country` (`iso`, `name`, `printable_name`, `iso3`, `numcode`, `eu`)
 ('UG', 'UGANDA', 'Uganda', 'UGA', 800, 'n'),
 ('UA', 'UKRAINE', 'Ukraine', 'UKR', 804, 'n'),
 ('AE', 'UNITED ARAB EMIRATES', 'United Arab Emirates', 'ARE', 784, 'n'),
-('GB', 'UNITED KINGDOM', 'United Kingdom', 'GBR', 826, 'y'),
+('GB', 'UNITED KINGDOM', 'United Kingdom', 'GBR', 826, 'n'),
 ('US', 'UNITED STATES', 'United States', 'USA', 840, 'n'),
 ('UM', 'UNITED STATES MINOR OUTLYING ISLANDS', 'United States Minor Outlying Islands', NULL, NULL, 'n'),
 ('UY', 'URUGUAY', 'Uruguay', 'URY', 858, 'n'),
@@ -2527,14 +2476,6 @@ INSERT INTO `help_faq` VALUES (1,1,0,'I would like to know ...','Yes, of course.
 --
 
 INSERT INTO `help_faq_sections` VALUES (1,'General',0,NULL,NULL,NULL,NULL,NULL);
-
--- --------------------------------------------------------
-
---
--- Dumping data for table `software_repo`
---
-
-INSERT INTO `software_repo` (`software_repo_id`, `sys_userid`, `sys_groupid`, `sys_perm_user`, `sys_perm_group`, `sys_perm_other`, `repo_name`, `repo_url`, `repo_username`, `repo_password`, `active`) VALUES (1, 1, 1, 'riud', 'riud', '', 'ISPConfig Addons', 'http://repo.ispconfig.org/addons/', '', '', 'n');
 
 -- --------------------------------------------------------
 

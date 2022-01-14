@@ -58,7 +58,7 @@ if($app->is_under_maintenance()) {
 if(count($_POST) > 0) {
 
 	//** Check variables
-	if(!preg_match("/^[\w\.\-\_\@]{1,128}$/", $_POST['username'])) $error = $app->lng('user_regex_error');
+	if(!preg_match("/^[\w\.\-\_\@]{1,128}$/", $app->functions->idn_encode($_POST['username']))) $error = $app->lng('user_regex_error');
 	if(!preg_match("/^.{1,256}$/i", $_POST['password'])) $error = $app->lng('pw_error_length');
 
 	//** importing variables
@@ -96,7 +96,7 @@ if(count($_POST) > 0) {
 
 						/* this is the reseller, that shall be re-logged in */
 						$sql = "SELECT * FROM sys_user WHERE USERNAME = ? and PASSWORT = ?";
-						$tmp = $app->db->queryOneRecord($sql, $username, $password);
+						$tmp = $app->db->queryOneRecord($sql, (string)$username, (string)$password);
 						$client_group_id = $app->functions->intval($tmp['default_group']);
 						$tmp_client = $app->db->queryOneRecord("SELECT client.client_id FROM sys_group, client WHERE sys_group.client_id = client.client_id and sys_group.groupid = ?", $client_group_id);
 
@@ -118,7 +118,7 @@ if(count($_POST) > 0) {
 
 				/* this is the user the reseller wants to 'login as' */
 				$sql = "SELECT * FROM sys_user WHERE USERNAME = ? and PASSWORT = ?";
-				$tmp = $app->db->queryOneRecord($sql, $username, $password);
+				$tmp = $app->db->queryOneRecord($sql, (string)$username, (string)$password);
 				$tmp_client = $app->db->queryOneRecord("SELECT client.client_id, client.parent_client_id FROM sys_group, client WHERE sys_group.client_id = client.client_id and sys_group.groupid = ?", $tmp["default_group"]);
 
 				if(!$tmp || $tmp_client["parent_client_id"] != $res_client["client_id"]) {
@@ -146,13 +146,13 @@ if(count($_POST) > 0) {
 
 			if ($loginAs){
 				$sql = "SELECT * FROM sys_user WHERE USERNAME = ? and PASSWORT = ?";
-				$user = $app->db->queryOneRecord($sql, $username, $password);
+				$user = $app->db->queryOneRecord($sql, (string)$username, (string)$password);
 			} else {
 
 				if(stristr($username, '@')) {
 					//* mailuser login
 					$sql = "SELECT * FROM mail_user WHERE login = ? or email = ?";
-					$mailuser = $app->db->queryOneRecord($sql, $username, $username);
+					$mailuser = $app->db->queryOneRecord($sql, (string)$username, $app->functions->idn_encode($username));
 					$user = false;
 					if($mailuser) {
 						$saved_password = stripslashes($mailuser['password']);
@@ -184,7 +184,7 @@ if(count($_POST) > 0) {
 				} else {
 					//* normal cp user login
 					$sql = "SELECT * FROM sys_user WHERE USERNAME = ?";
-					$user = $app->db->queryOneRecord($sql, $username);
+					$user = $app->db->queryOneRecord($sql, (string)$username);
 					if($user) {
 						$saved_password = stripslashes($user['passwort']);
 						if(substr($saved_password, 0, 1) == '$') {
@@ -199,7 +199,7 @@ if(count($_POST) > 0) {
 							} else {
 								// update password with secure algo
 								$sql = 'UPDATE `sys_user` SET `passwort` = ? WHERE `username` = ?';
-								$app->db->query($sql, $app->auth->crypt_password($password), $username);
+								$app->db->query($sql, $app->auth->crypt_password($password), (string)$username);
 							}
 						}
 					} else {

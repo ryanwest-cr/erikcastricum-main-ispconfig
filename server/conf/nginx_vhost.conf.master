@@ -15,7 +15,7 @@ server {
         listen <tmpl_var name='ip_address'>:<tmpl_var name='https_port'> ssl http2;
 <tmpl_if name='use_proxy_protocol' op='==' value='y'>
 <tmpl_if name='proxy_protocol_https' op='>' value='0'>
-        listen <tmpl_var name='ip_address'>:<tmpl_var name='proxy_protocol_https'> ssl proxy_protocol;
+        listen <tmpl_var name='ip_address'>:<tmpl_var name='proxy_protocol_https'> ssl http2 proxy_protocol;
 </tmpl_if>
 </tmpl_if>
 
@@ -60,13 +60,13 @@ server {
 </tmpl_loop>
 <tmpl_loop name="local_redirects">
         if ($http_host <tmpl_var name='local_redirect_operator'> "<tmpl_var name='local_redirect_origin_domain'>") {
-            rewrite ^<tmpl_var name='local_redirect_exclude'>(.*)$ <tmpl_var name='local_redirect_target'>$1 <tmpl_var name='local_redirect_type'>;
+            rewrite ^<tmpl_var name='local_redirect_exclude'>(.*)$ <tmpl_var name='local_redirect_target'>$2 <tmpl_var name='local_redirect_type'>;
         }
 </tmpl_loop>
 
 <tmpl_loop name="own_redirects">
 <tmpl_if name='use_rewrite'>
-        <tmpl_if name='exclude_own_hostname'>if ($http_host != "<tmpl_var name='exclude_own_hostname'>") { </tmpl_if>rewrite ^<tmpl_var name='rewrite_exclude'>(.*)$ <tmpl_var name='rewrite_target'>$1 <tmpl_var name='rewrite_type'>;<tmpl_if name='exclude_own_hostname'> }</tmpl_if>
+        <tmpl_if name='exclude_own_hostname'>if ($http_host != "<tmpl_var name='exclude_own_hostname'>") { </tmpl_if>rewrite ^<tmpl_var name='rewrite_exclude'>(.*)$ <tmpl_var name='rewrite_target'>$2 <tmpl_var name='rewrite_type'>;<tmpl_if name='exclude_own_hostname'> }</tmpl_if>
 </tmpl_if>
 <tmpl_if name='use_proxy'>
         location / {
@@ -79,7 +79,7 @@ server {
 </tmpl_if>
 </tmpl_loop>
 <tmpl_if name='use_proxy' op='!=' value='y'>
-        index index.html index.htm index.php index.cgi index.pl index.xhtml;
+        index index.html index.htm index.php index.cgi index.pl index.xhtml standard_index.html;
 
 <tmpl_if name='ssi' op='==' value='y'>
         location ~ \.shtml$ {
@@ -355,11 +355,18 @@ server {
 <tmpl_if name='ipv6_enabled'>
         listen [<tmpl_var name='ipv6_address'>]:<tmpl_var name='http_port'>;
 </tmpl_if>
+<tmpl_if name='ipv6_wildcard'>
+        listen [::]:<tmpl_var name='http_port'>;
+</tmpl_if>
+
 
 <tmpl_if name='ssl_enabled'>
-        listen <tmpl_var name='ip_address'>:<tmpl_var name='https_port'> ssl;
+        listen <tmpl_var name='ip_address'>:<tmpl_var name='https_port'> ssl http2;
 <tmpl_if name='ipv6_enabled'>
-        listen [<tmpl_var name='ipv6_address'>]:<tmpl_var name='https_port'> ssl;
+        listen [<tmpl_var name='ipv6_address'>]:<tmpl_var name='https_port'> ssl http2;
+</tmpl_if>
+<tmpl_if name='ipv6_wildcard'>
+        listen [::]:<tmpl_var name='https_port'> ssl http2;
 </tmpl_if>
         ssl_certificate <tmpl_var name='ssl_crt_file'>;
         ssl_certificate_key <tmpl_var name='ssl_key_file'>;
