@@ -513,31 +513,28 @@ class installer_dist extends installer_base {
 
 		$config_dir = $conf['postfix']['config_dir'];
 
-		// Adding amavis-services to the master.cf file if the service does not already exists
-		$add_amavis = !$this->get_postfix_service('amavis','unix');
-		$add_amavis_10025 = !$this->get_postfix_service('127.0.0.1:10025','inet');
-		$add_amavis_10027 = !$this->get_postfix_service('127.0.0.1:10027','inet');
+		// Adding amavis-services to the master.cf file
 
-		if ($add_amavis || $add_amavis_10025 || $add_amavis_10027) {
-			//* backup master.cf
-			if(is_file($config_dir.'/master.cf')) copy($config_dir.'/master.cf', $config_dir.'/master.cf~');
-			// adjust amavis-config
-			if($add_amavis) {
-				$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis.master', 'tpl/master_cf_amavis.master');
-				af($config_dir.'/master.cf', $content);
-				unset($content);
-			}
-			if ($add_amavis_10025) {
-				$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis10025.master', 'tpl/master_cf_amavis10025.master');
-				af($config_dir.'/master.cf', $content);
-				unset($content);
-			}
-			if ($add_amavis_10027) {
-				$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis10027.master', 'tpl/master_cf_amavis10027.master');
-				af($config_dir.'/master.cf', $content);
-				unset($content);
-			}
-		}
+		// backup master.cf
+		if(is_file($config_dir.'/master.cf')) copy($config_dir.'/master.cf', $config_dir.'/master.cf~');
+
+		// first remove the old service definitions
+		$this->remove_postfix_service('amavis','unix');
+		$this->remove_postfix_service('127.0.0.1:10025','inet');
+		$this->remove_postfix_service('127.0.0.1:10027','inet');
+
+		// then add them back
+		$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis.master', 'tpl/master_cf_amavis.master');
+		af($config_dir.'/master.cf', $content);
+		unset($content);
+
+		$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis10025.master', 'tpl/master_cf_amavis10025.master');
+		af($config_dir.'/master.cf', $content);
+		unset($content);
+
+		$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis10027.master', 'tpl/master_cf_amavis10027.master');
+		af($config_dir.'/master.cf', $content);
+		unset($content);
 
 		// Add the clamav user to the vscan group
 		//exec('groupmod --add-user clamav vscan');
