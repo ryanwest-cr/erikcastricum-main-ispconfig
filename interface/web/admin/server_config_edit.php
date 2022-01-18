@@ -64,7 +64,20 @@ class page_action extends tform_actions {
 			unset($app->tform->formDef["tabs"]["vlogger"]);
 		}
 		//Check if borg is installed
-		if (!$app->system->is_installed('borg')) {
+		$is_borg_installed = false;
+		if($this->id != $conf['server_id']) {
+			$mon = $app->db->queryOneRecord('SELECT `data` FROM `monitor_data` WHERE `server_id` = ? AND `type` = ? ORDER BY `created` DESC', $this->id, 'backup_utils');
+			if($mon) {
+				$missing_utils = unserialize($mon['data']);
+				if($missing_utils) {
+					$missing_utils = $missing_utils['missing_utils'];
+					$is_borg_installed = ! in_array('borg', $missing_utils);
+				}
+			}
+		} else {
+			$is_borg_installed = $app->system->is_installed('borg');
+		}
+		if ( ! $is_borg_installed) {
 			$app->tpl->setVar('missing_utils', 'BorgBackup');
 		}
 		parent::onShow();

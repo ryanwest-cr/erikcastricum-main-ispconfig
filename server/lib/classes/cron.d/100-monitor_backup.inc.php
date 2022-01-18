@@ -63,7 +63,8 @@ class cronjob_monitor_backup extends cronjob {
 		$type = 'backup_utils';
 
 		$missing_utils = array();
-		$compressors_list = array(
+		$util_list = array(
+			'borg',
 			'gzip',
 			'gunzip',
 			'zip',
@@ -77,9 +78,9 @@ class cronjob_monitor_backup extends cronjob {
 			'7z',
 			'rar',
 		);
-		foreach ($compressors_list as $compressor) {
-			if (!$app->system->is_installed($compressor)) {
-				$missing_utils[] = $compressor;
+		foreach ($util_list as $util) {
+			if (!$app->system->is_installed($util)) {
+				$missing_utils[] = $util;
 			}
 		}
 
