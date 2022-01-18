@@ -278,11 +278,12 @@ class monitor_tools {
 
 	//** RHEL (including compatible clones) & Fedora
 	elseif(file_exists('/etc/redhat-release') && file_exists('/etc/os-release')) {
+
 		$content = file_get_contents('/etc/os-release');
 
 		preg_match('/(?<=PRETTY_NAME=\").+?(?=\")/', $content, $prettyname);
 		preg_match('/(?<=NAME=\").+?(?=\")/', $content, $name);
-                preg_match('/(?<=VERSION=\").+?(?=\")/', $content, $version);
+		preg_match('/(?<=VERSION=\").+?(?=\")/', $content, $version);
 		preg_match('/(?<=VERSION_ID=\").+?(?=\")/', $content, $versionid);
 
 		if(stristr($prettyname[0], 'Fedora 32 (Thirty Two)')) {
@@ -298,15 +299,15 @@ class monitor_tools {
                 //** RHEL 7 and compatible clones 
 		} elseif(preg_match('/^(?:7|7\.[0-9]{1,2})$/', $versionid[0])) {
 			preg_match_all('/([0-9]{1,2})\.?([0-9]{0,2})\.?([0-9]*)/', file_get_contents('/etc/redhat-release'), $centos7_version);
-                        $distname = $name[0];
-                        $distver = is_array($centos7_version)? implode('.', array_filter(array($centos7_version[1][0],$centos7_version[2][0],$centos7_version[3][0]),'strlen')) : $version[0];
-                        $distid = 'centos72';
-                        $distbaseid = 'fedora';
+			$distname = $name[0];
+			$distver = is_array($centos7_version)? implode('.', array_filter(array($centos7_version[1][0],$centos7_version[2][0],$centos7_version[3][0]),'strlen')) : $version[0];
+			$distid = 'centos72';
+			$distbaseid = 'fedora';
 		//** RHEL 8 and compatible clones
 		} elseif(preg_match('/^(?:8|8\.[0-9]{1,2})$/', $versionid[0])) {
-                        $distname = $name[0];
-                        $distver = $version[0];
-                        $distid = 'centos80';
+			$distname = $name[0];
+			$distver = $version[0];
+			$distid = 'centos80';
 			$distbaseid = 'fedora';
 		} else {
 			$distname = 'Redhat';
@@ -322,7 +323,7 @@ class monitor_tools {
                 if(stristr($content, 'CentOS Linux release 6') || stristr($content, 'CentOS release 6')) {
                         preg_match_all('/(6\.?([0-9]{0,2})\.?(\s)?([a-zA-Z()]+))$/', $content, $centos6_version);
                         $distname = 'CentOS Linux';
-                        $distver = is_array($centos6_version)? implode('.', array_filter(array($centos6_version[0][0]),'strlen')) : '6';
+                        $distver = $centos6_version[0][0] ? $centos6_version[0][0] : '6';
                         $distid = 'centos53';
                         $distbaseid = 'fedora';
                 } else {
@@ -339,7 +340,7 @@ class monitor_tools {
                 if(stristr($content, 'CentOS Linux release 6') || stristr($content, 'CentOS release 6')) {
                         preg_match_all('/(6)\.?([0-9]{0,2})?\.?\s([a-zA-Z(), ]+)?$/', $content, $centos6_version);
                         $distname = 'CentOS Linux';
-                        $distver = $centos6_version[0][0];
+                        $distver = $centos6_version[0][0] ? $centos6_version[0][0] : '6';
                         $distid = 'centos53';
                         $distbaseid = 'fedora';
                 } else {
@@ -349,8 +350,6 @@ class monitor_tools {
                         $distbaseid = 'fedora';
                 }
         }
-
-
 
 
 	//** Gentoo

@@ -296,10 +296,10 @@ function get_distname() {
 
 		$content = file_get_contents('/etc/os-release');
 
-                preg_match('/(?<=PRETTY_NAME=\").+?(?=\")/', $content, $prettyname);
+		preg_match('/(?<=PRETTY_NAME=\").+?(?=\")/', $content, $prettyname);
 		preg_match('/(?<=NAME=\").+?(?=\")/', $content, $name);
-                preg_match('/(?<=VERSION=\").+?(?=\")/', $content, $version);
-                preg_match('/(?<=VERSION_ID=\").+?(?=\")/', $content, $versionid);
+		preg_match('/(?<=VERSION=\").+?(?=\")/', $content, $version);
+		preg_match('/(?<=VERSION_ID=\").+?(?=\")/', $content, $versionid);
 
                 if(stristr($prettyname[0], 'Fedora 32 (Thirty Two)')) {
                         $distname = 'Fedora';
@@ -343,8 +343,8 @@ function get_distname() {
                 if(stristr($content, 'CentOS Linux release 6') || stristr($content, 'CentOS release 6')) {
                         preg_match_all('/(6\.?([0-9]{0,2})\.?(\s)?([a-zA-Z()]+))$/', $content, $centos6_version);
                         $distname = 'CentOS Linux';
-                        $distver = is_array($centos6_version)? implode('.', array_filter(array($centos6_version[0][0]),'strlen')) : '6';
-                        $distid = 'centos53';
+			$distver = $centos6_version[0][0] ? $centos6_version[0][0] : '6';
+			$distid = 'centos53';
 			$distbaseid = 'fedora';
                         swriteln("Operating System: " . $distname . " " .  $distver . "\n");
 
@@ -362,7 +362,7 @@ function get_distname() {
                 if(stristr($content, 'CentOS Linux release 6') || stristr($content, 'CentOS release 6')) {
                         preg_match_all('/(6)\.?([0-9]{0,2})?\.?\s([a-zA-Z(), ]+)?$/', $content, $centos6_version);
                         $distname = 'CentOS Linux';
-                        $distver = $centos6_version[0][0];
+                        $distver = $centos6_version[0][0] ? $centos6_version[0][0] : '6';
                         $distid = 'centos53';
 			$distbaseid = 'fedora';
                         swriteln("Operating System: " . $distname . " " .  $distver . "\n");
