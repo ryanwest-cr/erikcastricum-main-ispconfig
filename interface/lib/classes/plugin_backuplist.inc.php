@@ -184,7 +184,7 @@ class plugin_backuplist extends plugin_base {
 
 				$backup_format = $rec['backup_format'];
 				$backup_mode = $rec['backup_mode'];
-				if ($backup_mode == 'borg') {
+				if ($backup_mode === 'borg') {
 					// Get backup format from domain config
 					switch ($rec['backup_type']) {
 						case 'mysql':
@@ -236,7 +236,7 @@ class plugin_backuplist extends plugin_base {
 
 				if($rec['filesize'] > 0){
 					$rec['filesize'] = $app->functions->currency_format($rec['filesize']/(1024*1024), 'client').'&nbsp;MB';
-					if($backup_mode == "borg") {
+					if($backup_mode === "borg") {
 						$rec['filesize'] = '<a href="javascript:void(0)" data-toggle="tooltip" title="'
 											. $wb['final_size_txt']
 											. '"><strong>*</strong></a>'
