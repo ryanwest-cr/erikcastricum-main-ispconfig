@@ -16,3 +16,4 @@ CREATE TABLE IF NOT EXISTS `mail_relay_domain` (
 
 INSERT INTO `mail_relay_domain` SELECT NULL, `sys_userid`, `sys_groupid`, `sys_perm_user`, `sys_perm_group`, `sys_perm_other`, `server_id`, `domain`, 'OK', `active` FROM `mail_transport` WHERE `domain` NOT LIKE '%@%' AND `domain` LIKE '%.%' GROUP BY `domain`, `server_id`;
 
+ALTER TABLE `dns_soa` ADD `rendered_zone` MEDIUMTEXT NULL AFTER `dnssec_info`;

@@ -42,4 +42,6 @@ $wb['xfer_error_regex'] = 'Notificar también a: Por favor, usa una dirección I
 $wb['xfer_txt'] = 'Permitir transferencia de zonas a<br />estas IP (lista separada por comas)';
 $wb['configuration_error_txt'] = 'CONFIGURATION ERROR';
 $wb['dnssec_algo_txt'] = 'DNSSEC Algorithm';
+$wb['rendered_zone_txt'] = 'Bind zone format for reference and export.';
+$wb['rendered_zone_unavailable_txt'] = 'Sorry, no data is available yet.';
 ?>

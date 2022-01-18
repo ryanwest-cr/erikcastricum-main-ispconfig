@@ -481,6 +481,12 @@ $form["tabs"]['dns'] = array (
 			'value'  => '',
 			'name'  => 'default_slave_dnsserver'
 		),
+		'dns_show_zoneexport' => array (
+			'datatype' => 'VARCHAR',
+			'formtype' => 'CHECKBOX',
+			'default' => 'n',
+			'value'  => array(0 => 'n', 1 => 'y')
+		),
 		//#################################
 		// END Datatable fields
 		//#################################
