@@ -187,8 +187,11 @@ $wb['nginx_vhost_conf_enabled_dir_error_empty'] = 'El directorio de configuraci�
 $wb['nginx_vhost_conf_enabled_dir_error_regex'] = 'El directorio de configuración para Vhost habilitados de Nginx es inválido.';
 $wb['nginx_vhost_conf_enabled_dir_txt'] = 'Directorio de configuración de host virtual de Nginx habilitado';
 $wb['no_notifications_txt'] = 'Sin notificaciones';
+$wb['overquota_db_notify_threshold_txt'] = 'DB quota warning usage level';
 $wb['overquota_db_notify_admin_txt'] = 'Enviar advertencias de cuota de base de datos al administrador';
 $wb['overquota_db_notify_client_txt'] = 'Enviar advertencias de cuota de base de datos a los clientes';
+$wb['overquota_notify_threshold_txt'] = 'Quota warning usage level';
+$wb['overquota_notify_threshold_error'] = 'Quota warning usage level must be between 0-100%';
 $wb['overquota_notify_admin_txt'] = 'Enviar advertencias de cuota excedida al administrador';
 $wb['overquota_notify_client_txt'] = 'Enviar advertencias de cuota excedida al cliente';
 $wb['overquota_notify_freq_note_txt'] = '0 = enviar mensaje solo una vez, sin volver a notificar';

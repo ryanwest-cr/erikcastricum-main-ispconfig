@@ -740,6 +740,18 @@ $form["tabs"]['mail'] = array(
 			'default' => 'y',
 			'value' => array(0 => 'n', 1 => 'y')
 		),
+		'overquota_notify_threshold' => array(
+			'datatype' => 'INTEGER',
+			'formtype' => 'TEXT',
+			'default' => '90',
+			'validators' => array(
+				0 => array('type' => 'NOTEMPTY', 'errmsg' => 'overquota_notify_threshold_error'),
+				1 => array('type' => 'RANGE',	'range' => '0:100',	'errmsg' => 'overquota_notify_threshold_error'),
+			),
+			'value' => '',
+			'width' => '20',
+			'maxlength' => '3'
+		),
 		'overquota_notify_admin' => array(
 			'datatype' => 'VARCHAR',
 			'formtype' => 'CHECKBOX',
@@ -1082,6 +1094,18 @@ $form["tabs"]['web'] = array(
 			'default' => 'y',
 			'value' => array(0 => 'n', 1 => 'y')
 		),
+		'overquota_notify_threshold' => array(
+			'datatype' => 'INTEGER',
+			'formtype' => 'TEXT',
+			'default' => '90',
+			'validators' => array(
+				0 => array('type' => 'NOTEMPTY', 'errmsg' => 'overquota_notify_threshold_error'),
+				1 => array('type' => 'RANGE',	'range' => '0:100',	'errmsg' => 'overquota_notify_threshold_error'),
+			),
+			'value' => '',
+			'width' => '20',
+			'maxlength' => '3'
+		),
 		'overquota_notify_admin' => array(
 			'datatype' => 'VARCHAR',
 			'formtype' => 'CHECKBOX',
@@ -1093,6 +1117,18 @@ $form["tabs"]['web'] = array(
 			'formtype' => 'CHECKBOX',
 			'default' => 'y',
 			'value' => array(0 => 'n', 1 => 'y')
+		),
+		'overquota_db_notify_threshold' => array(
+			'datatype' => 'INTEGER',
+			'formtype' => 'TEXT',
+			'default' => '90',
+			'validators' => array(
+				0 => array('type' => 'NOTEMPTY', 'errmsg' => 'overquota_notify_threshold_error'),
+				1 => array('type' => 'RANGE',	'range' => '0:100',	'errmsg' => 'overquota_notify_threshold_error'),
+			),
+			'value' => '',
+			'width' => '20',
+			'maxlength' => '3'
 		),
 		'overquota_db_notify_admin' => array(
 			'datatype' => 'VARCHAR',
