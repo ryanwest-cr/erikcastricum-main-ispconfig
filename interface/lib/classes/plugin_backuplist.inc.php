@@ -320,6 +320,7 @@ class plugin_backuplist extends plugin_base {
 		}
 		return null;
 	}
+
 	protected static function getDefaultBackupFormat($backup_mode, $backup_type)
 	{
 		//We have a backup from old version of ISPConfig
