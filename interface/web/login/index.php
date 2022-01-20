@@ -182,8 +182,7 @@ function is_admin_ip_whitelisted($ip, $conf)
 	// if the file doesn't exist, we assume that webmaster doesn't use this feature
 	if (!file_exists($conf['admin_ip_whitelist_file'])) return true;
 
-	$file_content = file_get_contents($conf['admin_ip_whitelist_file']);
-	$file_lines = explode("\n", $file_content);
+	$file_lines = file($conf['admin_ip_whitelist_file']);
 
 	$matches = array_filter($file_lines, function($v) use ($ip) {
 		$line = trim($v);
