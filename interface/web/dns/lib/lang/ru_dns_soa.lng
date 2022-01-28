@@ -42,4 +42,6 @@ $wb['error_not_allowed_server_id'] = 'Выбранный сервер не до�
 $wb['soa_cannot_be_changed_txt'] = 'Зона (SOA) не может быть изменена. Пожалуйста, обратитесь к администратору, чтобы изменить зону.';
 $wb['configuration_error_txt'] = 'ОШИБКА КОНФИГУРАЦИИ';
 $wb['dnssec_algo_txt'] = 'DNSSEC Algorithm';
+$wb['rendered_zone_txt'] = 'Bind zone format for reference and export.';
+$wb['rendered_zone_unavailable_txt'] = 'Sorry, no data is available yet.';
 ?>

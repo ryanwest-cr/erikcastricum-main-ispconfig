@@ -323,6 +323,21 @@ $form["tabs"]['dns_soa'] = array (
 	)
 );
 
+$sys_config = $app->getconf->get_global_config('dns');
+if($sys_config['dns_show_zoneexport'] == 'y') {
+	$form["tabs"]['dns_rendered_zone'] = array (
+		'title'  => "Zone rendering",
+		'width'  => 100,
+		'template'  => "templates/dns_soa_rendered.htm",
+		'fields'  => array (
+			'rendered_zone' => array (
+				'datatype' => 'TEXT',
+				'formtype' => 'TEXTAREA',
+			),
+		)
+	);
+}
+
 // show update acl to admins only.
 if(!$app->auth->is_admin()) unset($form["tabs"]['dns_soa']['fields']['update_acl']);
 

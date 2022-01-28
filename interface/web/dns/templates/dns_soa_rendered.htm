@@ -1,0 +1,12 @@
+
+{tmpl_if name='rendered_zone'}
+    {tmpl_var name='rendered_zone_txt'}
+    <pre>{tmpl_var name='rendered_zone'}</pre>
+{tmpl_else}
+    {tmpl_var name='rendered_zone_unavailable_txt'}
+{/tmpl_if}
+
+<div class="pnl_formsarea">
+    <input type="hidden" name="id" value="{tmpl_var name='id'}">
+</div>
+
