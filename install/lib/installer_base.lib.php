@@ -190,6 +190,7 @@ class installer_base {
 			$salt_length = 12;
 		}
 
+		// todo: replace the below with password_hash() when we drop php5.4 support
 		if(function_exists('openssl_random_pseudo_bytes')) {
 			$salt .= substr(bin2hex(openssl_random_pseudo_bytes($salt_length)), 0, $salt_length);
 		} else {

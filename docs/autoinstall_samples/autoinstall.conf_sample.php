@@ -29,7 +29,7 @@ $autoinstall['ssl_cert_email'] = 'hostmaster@'.$autoinstall['hostname'];
 
 /* optional expert mode settings, needed only for expert mode */
 $autoinstall['mysql_ispconfig_user'] = 'ispconfig'; // default: ispconfig
-$autoinstall['mysql_ispconfig_password'] = md5(uniqid(rand()));
+$autoinstall['mysql_ispconfig_password'] = bin2hex(random_bytes(20));
 $autoinstall['join_multiserver_setup'] = 'n'; // y, n (default)
 $autoinstall['mysql_master_hostname'] = 'master.example.com';
 $autoinstall['mysql_master_root_user'] = 'root';
