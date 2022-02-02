@@ -175,7 +175,7 @@ includesections = php, uidbasics, netbasics
 
 [node]
 comment = NodeJS
-paths = npm, node, nodejs, /usr/lib/nodejs, /usr/share/npm, /usr/share/node-mime, /usr/lib/node_modules, /usr/local/lib/nodejs, /usr/local/lib/node_modules, elmi-to-json, /usr/local/bin/elmi-to-json
+paths = npm, npx, node, nodejs, semver, /usr/lib/nodejs, /usr/share/nodejs, /usr/share/npm, /usr/share/node-mime, /usr/lib/node_modules, /usr/local/lib/nodejs, /usr/local/lib/node_modules, /etc/npmrc, /etc/npmignore, elmi-to-json, /usr/local/bin/elmi-to-json
 
 [env]
 comment = /usr/bin/env for environment variables
