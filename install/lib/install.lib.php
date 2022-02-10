@@ -842,7 +842,7 @@ function is_installed($appname) {
 
 function get_ispconfig_port_number() {
 	global $conf;
-	if($conf['nginx']['installed'] == true){
+	if(is_file($conf['nginx']['vhost_conf_dir'].'/ispconfig.vhost')) {
 		$ispconfig_vhost_file = $conf['nginx']['vhost_conf_dir'].'/ispconfig.vhost';
 		$regex = '/listen (\d+)/';
 	} else {
@@ -868,7 +868,7 @@ function get_ispconfig_port_number() {
 
 function get_apps_vhost_port_number() {
 	global $conf;
-	if($conf['nginx']['installed'] == true){
+	if(is_file($conf['nginx']['vhost_conf_dir'].'/apps.vhost')) {
 		$ispconfig_vhost_file = $conf['nginx']['vhost_conf_dir'].'/apps.vhost';
 		$regex = '/listen (\d+)/';
 	} else {
