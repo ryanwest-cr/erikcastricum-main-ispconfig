@@ -440,7 +440,7 @@ class page_action extends tform_actions {
 			}
 		}
 
-		$tmp_user = $app->db->queryOneRecord("SELECT id FROM spamfilter_users WHERE email = ?", '@' . $domain);
+		$tmp_user = $app->db->queryOneRecord("SELECT id, policy_id FROM spamfilter_users WHERE email = ?", '@' . $domain);
 		if($tmp_user["id"] > 0) {
 			// There is already a record that we will update
 			if((! $skip_spamfilter_users_update) && ($policy_id != $tmp_user['policy_id'])) {
