@@ -39,6 +39,8 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 function include_menu_dir_files($menu_dir)
 {
+	global $app;
+
 	if (is_dir($menu_dir)) {
 		if ($dh = opendir($menu_dir)) {
 			//** Go through all files in the menu dir
