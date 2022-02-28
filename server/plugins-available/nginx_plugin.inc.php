@@ -567,6 +567,7 @@ class nginx_plugin {
 		if(!is_dir($data['new']['document_root'].'/ssl')) $app->system->mkdirpath($data['new']['document_root'].'/ssl');
 		if(!is_dir($data['new']['document_root'].'/cgi-bin')) $app->system->mkdirpath($data['new']['document_root'].'/cgi-bin');
 		if(!is_dir($data['new']['document_root'].'/tmp')) $app->system->mkdirpath($data['new']['document_root'].'/tmp');
+		if(!is_dir($data['new']['document_root'].'/backup')) $app->system->mkdirpath($data['new']['document_root'].'/backup');
 
 		if(!is_dir($data['new']['document_root'].'/.ssh')) {
 			$app->system->mkdirpath($data['new']['document_root'].'/.ssh');
