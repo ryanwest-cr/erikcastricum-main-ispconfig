@@ -354,7 +354,7 @@ thead.dark th[data-column]:before {
 }
 
 thead.dark th[data-column][data-ordered] {
-    background: linear-gradient(to top,#57646d,#3e474e);
+    background: linear-gradient(to top, #57646d, #3e474e);
 }
 
 thead.dark th[data-column][data-ordered]:before {
