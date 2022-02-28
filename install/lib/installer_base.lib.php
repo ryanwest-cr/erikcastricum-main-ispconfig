@@ -2759,11 +2759,17 @@ class installer_base {
 			$content = str_replace('{use_socket}', $use_socket, $content);
 
 			// Fix socket path on PHP 7 systems
-			if(file_exists('/var/run/php/php7.0-fpm.sock'))	$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.0-fpm.sock', $content);
-			if(file_exists('/var/run/php/php7.1-fpm.sock'))	$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.1-fpm.sock', $content);
-			if(file_exists('/var/run/php/php7.2-fpm.sock'))	$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.2-fpm.sock', $content);
-			if(file_exists('/var/run/php/php7.3-fpm.sock'))	$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.3-fpm.sock', $content);
-			if(file_exists('/var/run/php/php7.4-fpm.sock'))	$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.4-fpm.sock', $content);
+			if (file_exists('/var/run/php/php7.4-fpm.sock')) {
+				$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.4-fpm.sock', $content);
+			} elseif(file_exists('/var/run/php/php7.3-fpm.sock')) {
+				$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.3-fpm.sock', $content);
+			} elseif (file_exists('/var/run/php/php7.2-fpm.sock')) {
+				$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.2-fpm.sock', $content);
+			} elseif (file_exists('/var/run/php/php7.1-fpm.sock')) {
+				$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.1-fpm.sock', $content);
+			} elseif (file_exists('/var/run/php/php7.0-fpm.sock')) {
+				$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.0-fpm.sock', $content);
+			}
 
 			wf($vhost_conf_dir.'/apps.vhost', $content);
 
