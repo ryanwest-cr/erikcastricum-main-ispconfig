@@ -506,7 +506,13 @@ class installer extends installer_base
 		 */
 
 
-		$content = preg_replace('/MISC_OTHER="[^"]+"/', 'MISC_OTHER="-b -A -E -Z -D -H -O clf:'.$logdir.'/transfer.log"', $content);
+		 //* Enable TLS if certificate file exists
+		 $enable_tls = '';
+		 if(file_exists('/etc/ssl/private/pure-ftpd.pem')) {
+			 $enable_tls = ' -Y 1';
+		 }
+
+		 $content = preg_replace('/MISC_OTHER="[^"]+"/', 'MISC_OTHER="-b -A -E -Z -D -H -O clf:'.$logdir.'/transfer.log'.$enable_tls.'"', $content);
 
 		$this->write_config_file($conf['pureftpd']['config_file'], $content);
 	}
