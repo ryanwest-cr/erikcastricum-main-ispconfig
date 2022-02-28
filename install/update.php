@@ -216,6 +216,19 @@ if($do_backup == 'yes') {
 	exec("tar pcfz $backup_path/etc.tar.gz /etc 2> /dev/null", $out, $returnvar);
 	if($returnvar != 0) die("Backup failed. We stop here...\n");
 
+  if (is_dir('/root/.acme.sh')) {
+    swriteln('Creating backup of "/root/.acme.sh" directory...');
+    exec("tar pcfz $backup_path/acme.sh.tar.gz /root/.acme.sh 2> /dev/null", $out, $returnvar);
+    if($returnvar != 0) die("Backup failed. We stop here...\n");
+  }
+
+  if (is_dir('/etc/letsencrypt')) {
+    swriteln('Creating backup of "/etc/letsencrypt" directory...');
+    exec("tar pcfz $backup_path/certbot.tar.gz /etc/letsencrypt 2> /dev/null", $out, $returnvar);
+    if($returnvar != 0) die("Backup failed. We stop here...\n");
+  }
+
+
 	exec("chown root:root $backup_path/*.tar.gz");
 	exec("chmod 700 $backup_path/*.tar.gz");
 }
