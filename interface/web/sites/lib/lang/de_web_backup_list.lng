@@ -30,6 +30,7 @@ $wb['manual_backup_title_txt'] = 'Manual backup';
 $wb['make_backup_web_txt'] = 'Make backup of web files';
 $wb['make_backup_database_txt'] = 'Make backup of databases';
 $wb['make_backup_confirm_txt'] = 'You are about to start a manual backup process. Manual backups count towards the total number of allowed backup copies: therefore if the limit will be exceeded, then oldest backups may be deleted automatically. Proceed?';
+$wb['final_size_txt'] = 'Final download size may vary depending on selected compression format.';
 $wb['yes_txt'] = 'Yes';
 $wb['no_txt'] = 'No';
 $wb['backup_is_encrypted_txt'] = 'Encrypted';

@@ -32,6 +32,7 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * Class backup
  * All code that makes actual backup and restore of web files and database is here.
  * @author Ramil Valitov <ramilvalitov@gmail.com>
+ * @author Jorge Muñoz <elgeorge2k@gmail.com> (Repository addition)
  * @see backup::run_backup() to run a single backup
  * @see backup::run_all_backups() to run all backups
  * @see backup::restoreBackupDatabase() to restore a database
@@ -93,6 +94,16 @@ class backup
         }
         return null;
     }
+    /**
+     * Checks whatever a backup mode is for a repository
+     * @param $mode Backup mode
+     * @return bool
+     * @author Jorge Muñoz <elgeorge2k@gmail.com>
+     */
+    protected static function backupModeIsRepos($mode)
+    {
+        return 'borg' === $mode;
+    }
 
     /**
      * Sets file ownership to $web_user for all files and folders except log, ssl and web/stats
@@ -148,6 +159,7 @@ class backup
      * @return bool true if succeeded
      * @see backup_plugin::mount_backup_dir()
      * @author Ramil Valitov <ramilvalitov@gmail.com>
+     * @author Jorge Muñoz <elgeorge2k@gmail.com>
      */
     public static function restoreBackupDatabase($backup_format, $password, $backup_dir, $filename, $backup_mode, $backup_type)
     {
@@ -155,60 +167,116 @@ class backup
 
         //* Load sql dump into db
         include 'lib/mysql_clientdb.conf';
+        if (self::backupModeIsRepos($backup_mode)) {
 
-        if (empty($backup_format)) {
-            $backup_format = self::getDefaultBackupFormat($backup_mode, $backup_type);
-        }
-        $extension = self::getBackupDbExtension($backup_format);
-        if (!empty($extension)) {
-            //Replace dots for preg_match search
-            $extension = str_replace('.', '\.', $extension);
-        }
-        $success = false;
-        $full_filename = $backup_dir . '/' . $filename;
+            $backup_archive = $filename;
 
-        $app->log('Restoring MySQL backup ' . $full_filename . ', backup format "' . $backup_format . '", backup mode "' . $backup_mode . '"', LOGLEVEL_DEBUG);
+            preg_match('@^(manual-)?db_(?P<db>.+)_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}$@', $backup_archive, $matches);
+            if (isset($matches['db']) && ! empty($matches['db'])) {
+                $db_name = $matches['db'];
+                $backup_repos_folder = self::getReposFolder($backup_mode, 'mysql', '_' . $db_name);
+                $backup_repos_path = $backup_dir . '/' . $backup_repos_folder;
+                $full_archive_path = $backup_repos_path . '::' . $backup_archive;
 
-        if (file_exists($full_filename) && !empty($extension)) {
+                $app->log('Restoring MySQL backup from archive ' . $backup_archive . ', backup mode "' . $backup_mode . '"', LOGLEVEL_DEBUG);
+
+                $archives = self::getReposArchives($backup_mode, $backup_repos_path, $password);
+            } else {
+                $app->log('Failed to detect database name during restore of ' . $backup_archive, LOGLEVEL_ERROR);
+                $db_name = null;
+                $archives = null;
+            }
+            if (is_array($archives)) {
+                if (in_array($backup_archive, $archives)) {
+                    switch ($backup_mode) {
+                        case "borg":
+                            $command = self::getBorgCommand('borg extract --nobsdflags', $password);
+                            $command .= " --stdout ? stdin | mysql -h ? -u ? -p? ?";
+                            break;
+                    }
+                } else {
+                    $app->log('Failed to process MySQL backup ' . $full_archive_path . ' because it does not exist', LOGLEVEL_ERROR);
+                    $command = null;
+                }
+            }
+            if (!empty($command)) {
+                /** @var string $clientdb_host */
+                /** @var string $clientdb_user */
+                /** @var string $clientdb_password */
+                $app->system->exec_safe($command, $full_archive_path, $clientdb_host, $clientdb_user, $clientdb_password, $db_name);
+                $retval = $app->system->last_exec_retcode();
+                if ($retval == 0) {
+                    $app->log('Restored database backup ' . $full_archive_path, LOGLEVEL_DEBUG);
+                    $success = true;
+                } else {
+                    $app->log('Failed to restore database backup ' . $full_archive_path . ', exit code ' . $retval, LOGLEVEL_ERROR);
+                }
+            }
+        } else {
+            if (empty($backup_format)) {
+                $backup_format = self::getDefaultBackupFormat($backup_mode, $backup_type);
+            }
+            $extension = self::getBackupDbExtension($backup_format);
+            if (!empty($extension)) {
+                //Replace dots for preg_match search
+                $extension = str_replace('.', '\.', $extension);
+            }
+            $success = false;
+            $full_filename = $backup_dir . '/' . $filename;
+
+            $app->log('Restoring MySQL backup ' . $full_filename . ', backup format "' . $backup_format . '", backup mode "' . $backup_mode . '"', LOGLEVEL_DEBUG);
+
             preg_match('@^(manual-)?db_(?P<db>.+)_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}' . $extension . '$@', $filename, $matches);
             if (!isset($matches['db']) || empty($matches['db'])) {
                 $app->log('Failed to detect database name during restore of ' . $full_filename, LOGLEVEL_ERROR);
-                return false;
+                $db_name = null;
+            } else {
+                $db_name = $matches['db'];
             }
-            $db_name = $matches['db'];
-            switch ($backup_format) {
-                case "gzip":
-                    $command = "gunzip --stdout ? | mysql -h ? -u ? -p? ?";
-                    break;
-                case "zip":
-                case "zip_bzip2":
-                    $command = "unzip -qq -p -P " . escapeshellarg($password) . " ? | mysql -h ? -u ? -p? ?";
-                    break;
-                case "bzip2":
-                    $command = "bunzip2 -q -c ? | mysql -h ? -u ? -p? ?";
-                    break;
-                case "xz":
-                    $command = "unxz -q -q -c ? | mysql -h ? -u ? -p? ?";
-                    break;
-                case "rar":
+
+            if ( ! empty($db_name)) {
+                $file_check = file_exists($full_filename) && !empty($extension);
+                if ( ! $file_check) {
+                    $app->log('Archive test failed for ' . $full_filename, LOGLEVEL_WARN);
+                }
+            } else {
+                $file_check = false;
+            }
+            if ($file_check) {
+                switch ($backup_format) {
+                    case "gzip":
+                        $command = "gunzip --stdout ? | mysql -h ? -u ? -p? ?";
+                        break;
+                    case "zip":
+                    case "zip_bzip2":
+                        $command = "unzip -qq -p -P " . escapeshellarg($password) . " ? | mysql -h ? -u ? -p? ?";
+                        break;
+                    case "bzip2":
+                        $command = "bunzip2 -q -c ? | mysql -h ? -u ? -p? ?";
+                        break;
+                    case "xz":
+                        $command = "unxz -q -q -c ? | mysql -h ? -u ? -p? ?";
+                        break;
+                    case "rar":
+                        //First, test that the archive is correct and we have a correct password
+                        $options = self::getUnrarOptions($password);
+                        $app->system->exec_safe("rar t " . $options . " ?", $full_filename);
+                        if ($app->system->last_exec_retcode() == 0) {
+                            $app->log('Archive test passed for ' . $full_filename, LOGLEVEL_DEBUG);
+                            $command = "rar x " . $options. " ? | mysql -h ? -u ? -p? ?";
+                        }
+                        break;
+                }
+                if (strpos($backup_format, "7z_") === 0) {
+                    $options = self::get7zDecompressOptions($password);
                     //First, test that the archive is correct and we have a correct password
-                    $options = self::getUnrarOptions($password);
-                    $app->system->exec_safe("rar t " . $options . " ?", $full_filename);
+                    $app->system->exec_safe("7z t " . $options . " ?", $full_filename);
                     if ($app->system->last_exec_retcode() == 0) {
                         $app->log('Archive test passed for ' . $full_filename, LOGLEVEL_DEBUG);
-                        $command = "rar x " . $options. " ? | mysql -h ? -u ? -p? ?";
-                    }
-                    break;
-            }
-            if (strpos($backup_format, "7z_") === 0) {
-                $options = self::get7zDecompressOptions($password);
-                //First, test that the archive is correct and we have a correct password
-                $app->system->exec_safe("7z t " . $options . " ?", $full_filename);
-                if ($app->system->last_exec_retcode() == 0) {
-                    $app->log('Archive test passed for ' . $full_filename, LOGLEVEL_DEBUG);
-                    $command = "7z x " . $options . " -so ? | mysql -h ? -u ? -p? ?";
-                } else
-                    $command = null;
+                        $command = "7z x " . $options . " -so ? | mysql -h ? -u ? -p? ?";
+                    } else
+                        $command = null;
+                }
             }
             if (!empty($command)) {
                 /** @var string $clientdb_host */
@@ -220,13 +288,9 @@ class backup
                     $app->log('Restored MySQL backup ' . $full_filename, LOGLEVEL_DEBUG);
                     $success = true;
                 } else {
-                    $app->log('Failed to restore web backup ' . $full_filename . ', exit code ' . $retval, LOGLEVEL_ERROR);
+                    $app->log('Failed to restore MySQL backup ' . $full_filename . ', exit code ' . $retval, LOGLEVEL_ERROR);
                 }
-            } else {
-                $app->log('Archive test failed for ' . $full_filename, LOGLEVEL_DEBUG);
             }
-        } else {
-            $app->log('Failed to process MySQL backup ' . $full_filename, LOGLEVEL_ERROR);
         }
         unset($clientdb_host);
         unset($clientdb_user);
@@ -250,117 +314,336 @@ class backup
      * @return bool true if succeed
      * @see backup_plugin::mount_backup_dir()
      * @author Ramil Valitov <ramilvalitov@gmail.com>
+     * @author Jorge Muñoz <elgeorge2k@gmail.com>
      */
     public static function restoreBackupWebFiles($backup_format, $password, $backup_dir, $filename, $backup_mode, $backup_type, $web_root, $web_user, $web_group)
     {
         global $app;
 
-        if (empty($backup_format)) {
-            $backup_format = self::getDefaultBackupFormat($backup_mode, $backup_type);
-        }
-        $full_filename = $backup_dir . '/' . $filename;
         $result = false;
 
-        $app->log('Restoring web backup ' . $full_filename . ', backup format "' . $backup_format . '", backup mode "' . $backup_mode . '"', LOGLEVEL_DEBUG);
+        $app->system->web_folder_protection($web_root, false);
+        if (self::backupModeIsRepos($backup_mode)) {
+            $backup_archive = $filename;
+            $backup_repos_folder = self::getReposFolder($backup_mode, 'web');
+            $backup_repos_path = $backup_dir . '/' . $backup_repos_folder;
+            $full_archive_path = $backup_repos_path . '::' . $backup_archive;
 
-        if (!empty($backup_format)) {
-            $app->system->web_folder_protection($web_root, false);
-            if ($backup_mode == 'userzip' || $backup_mode == 'rootgz') {
-                $user_mode = $backup_mode == 'userzip';
-                $filename = $user_mode ? ($web_root . '/backup/' . $filename) : $full_filename;
+            $app->log('Restoring web backup archive ' . $full_archive_path . ', backup mode "' . $backup_mode . '"', LOGLEVEL_DEBUG);
 
-                if (file_exists($full_filename) && $web_root != '' && $web_root != '/' && !stristr($full_filename, '..') && !stristr($full_filename, 'etc')) {
-                    if ($user_mode) {
-                        if (file_exists($filename)) rename($filename, $filename . '.bak');
-                        copy($full_filename, $filename);
-                        chgrp($filename, $web_group);
-                    }
-                    $user_prefix_cmd = $user_mode ? 'sudo -u ' . escapeshellarg($web_user) : '';
-                    $success = false;
-                    $retval = 0;
-                    switch ($backup_format) {
-                        case "tar_gzip":
-                        case "tar_bzip2":
-                        case "tar_xz":
-                            $command = $user_prefix_cmd . ' tar xf ? --directory ?';
-                            $app->system->exec_safe($command, $filename, $web_root);
-                            $retval = $app->system->last_exec_retcode();
-                            $success = ($retval == 0 || $retval == 2);
-                            break;
-                        case "zip":
-                        case "zip_bzip2":
-                            $command = $user_prefix_cmd . ' unzip -qq -P ' . escapeshellarg($password) . ' -o ? -d ? 2> /dev/null';
-                            $app->system->exec_safe($command, $filename, $web_root);
-                            $retval = $app->system->last_exec_retcode();
-                            /*
-                             * Exit code 50 can happen when zip fails to overwrite files that do not
-                             * belong to selected user, so we can consider this situation as success
-                             * with warnings.
-                             */
-                            $success = ($retval == 0 || $retval == 50);
-                            if ($success) {
-                                self::restoreFileOwnership($web_root, $web_user, $web_group);
-                            }
-                            break;
-                        case 'rar':
-                            $options = self::getUnRarOptions($password);
-                            //First, test that the archive is correct and we have a correct password
-                            $command = $user_prefix_cmd . " rar t " . $options . " ? ?";
-                            //Rar requires trailing slash
-                            $app->system->exec_safe($command, $filename, $web_root . '/');
-                            $success = ($app->system->last_exec_retcode() == 0);
-                            if ($success) {
-                                //All good, now we can extract
-                                $app->log('Archive test passed for ' . $full_filename, LOGLEVEL_DEBUG);
-                                $command = $user_prefix_cmd . " rar x " . $options . " ? ?";
-                                //Rar requires trailing slash
-                                $app->system->exec_safe($command, $filename, $web_root . '/');
-                                $retval = $app->system->last_exec_retcode();
-                                //Exit code 9 can happen when we have file permission errors, in this case some
-                                //files will be skipped during extraction.
-                                $success = ($retval == 0 || $retval == 1 || $retval == 9);
-                            } else {
-                                $app->log('Archive test failed for ' . $full_filename, LOGLEVEL_DEBUG);
-                            }
-                            break;
-                    }
-                    if (strpos($backup_format, "tar_7z_") === 0) {
-                        $options = self::get7zDecompressOptions($password);
+            $archives = self::getReposArchives($backup_mode, $backup_repos_path, $password);
+            if (is_array($archives) && in_array($backup_archive, $archives)) {
+                $retval = 0;
+                switch ($backup_mode) {
+                    case "borg":
+                        $command = 'cd ? && borg extract --nobsdflags ?';
+                        $app->system->exec_safe($command, $web_root, $full_archive_path);
+                        $retval = $app->system->last_exec_retcode();
+                        $success = ($retval == 0 || $retval == 1);
+                        break;
+                }
+                if ($success) {
+                    $app->log('Restored web backup ' . $full_archive_path, LOGLEVEL_DEBUG);
+                    $result = true;
+                } else {
+                    $app->log('Failed to restore web backup ' . $full_archive_path . ', exit code ' . $retval, LOGLEVEL_ERROR);
+                }
+            } else {
+                $app->log('Web backup archive does not exist ' . $full_archive_path, LOGLEVEL_ERROR);
+            }
+
+        } elseif ($backup_mode == 'userzip' || $backup_mode == 'rootgz') {
+
+            if (empty($backup_format) || $backup_format == 'default') {
+                $backup_format = self::getDefaultBackupFormat($backup_mode, $backup_type);
+            }
+            $full_filename = $backup_dir . '/' . $filename;
+
+            $app->log('Restoring web backup ' . $full_filename . ', backup format "' . $backup_format . '", backup mode "' . $backup_mode . '"', LOGLEVEL_DEBUG);
+
+            $user_mode = $backup_mode == 'userzip';
+            $filename = $user_mode ? ($web_root . '/backup/' . $filename) : $full_filename;
+
+            if (file_exists($full_filename) && $web_root != '' && $web_root != '/' && !stristr($full_filename, '..') && !stristr($full_filename, 'etc')) {
+                if ($user_mode) {
+                    if (file_exists($filename)) rename($filename, $filename . '.bak');
+                    copy($full_filename, $filename);
+                    chgrp($filename, $web_group);
+                }
+                $user_prefix_cmd = $user_mode ? 'sudo -u ' . escapeshellarg($web_user) : '';
+                $success = false;
+                $retval = 0;
+                switch ($backup_format) {
+                    case "tar_gzip":
+                    case "tar_bzip2":
+                    case "tar_xz":
+                        $command = $user_prefix_cmd . ' tar xf ? --directory ?';
+                        $app->system->exec_safe($command, $filename, $web_root);
+                        $retval = $app->system->last_exec_retcode();
+                        $success = ($retval == 0 || $retval == 2);
+                        break;
+                    case "zip":
+                    case "zip_bzip2":
+                        $command = $user_prefix_cmd . ' unzip -qq -P ' . escapeshellarg($password) . ' -o ? -d ? 2> /dev/null';
+                        $app->system->exec_safe($command, $filename, $web_root);
+                        $retval = $app->system->last_exec_retcode();
+                        /*
+                         * Exit code 50 can happen when zip fails to overwrite files that do not
+                         * belong to selected user, so we can consider this situation as success
+                         * with warnings.
+                         */
+                        $success = ($retval == 0 || $retval == 50);
+                        if ($success) {
+                            self::restoreFileOwnership($web_root, $web_user, $web_group);
+                        }
+                        break;
+                    case 'rar':
+                        $options = self::getUnRarOptions($password);
                         //First, test that the archive is correct and we have a correct password
-                        $command = $user_prefix_cmd . " 7z t " . $options . " ?";
-                        $app->system->exec_safe($command, $filename);
+                        $command = $user_prefix_cmd . " rar t " . $options . " ? ?";
+                        //Rar requires trailing slash
+                        $app->system->exec_safe($command, $filename, $web_root . '/');
                         $success = ($app->system->last_exec_retcode() == 0);
                         if ($success) {
                             //All good, now we can extract
                             $app->log('Archive test passed for ' . $full_filename, LOGLEVEL_DEBUG);
-                            $command = $user_prefix_cmd . " 7z x " . $options . " -so ? | tar xf - --directory ?";
-                            $app->system->exec_safe($command, $filename, $web_root);
+                            $command = $user_prefix_cmd . " rar x " . $options . " ? ?";
+                            //Rar requires trailing slash
+                            $app->system->exec_safe($command, $filename, $web_root . '/');
                             $retval = $app->system->last_exec_retcode();
-                            $success = ($retval == 0 || $retval == 2);
+                            //Exit code 9 can happen when we have file permission errors, in this case some
+                            //files will be skipped during extraction.
+                            $success = ($retval == 0 || $retval == 1 || $retval == 9);
                         } else {
                             $app->log('Archive test failed for ' . $full_filename, LOGLEVEL_DEBUG);
                         }
-                    }
-                    if ($user_mode) {
-                        unlink($filename);
-                        if (file_exists($filename . '.bak')) rename($filename . '.bak', $filename);
-                    }
+                        break;
+                }
+                if (strpos($backup_format, "tar_7z_") === 0) {
+                    $options = self::get7zDecompressOptions($password);
+                    //First, test that the archive is correct and we have a correct password
+                    $command = $user_prefix_cmd . " 7z t " . $options . " ?";
+                    $app->system->exec_safe($command, $filename);
+                    $success = ($app->system->last_exec_retcode() == 0);
                     if ($success) {
-                        $app->log('Restored web backup ' . $full_filename, LOGLEVEL_DEBUG);
-                        $result = true;
+                        //All good, now we can extract
+                        $app->log('Archive test passed for ' . $full_filename, LOGLEVEL_DEBUG);
+                        $command = $user_prefix_cmd . " 7z x " . $options . " -so ? | tar xf - --directory ?";
+                        $app->system->exec_safe($command, $filename, $web_root);
+                        $retval = $app->system->last_exec_retcode();
+                        $success = ($retval == 0 || $retval == 2);
                     } else {
-                        $app->log('Failed to restore web backup ' . $full_filename . ', exit code ' . $retval, LOGLEVEL_ERROR);
+                        $app->log('Archive test failed for ' . $full_filename, LOGLEVEL_DEBUG);
                     }
                 }
-            } else {
-                $app->log('Failed to restore web backup ' . $full_filename . ', backup mode "' . $backup_mode . '" not recognized.', LOGLEVEL_DEBUG);
+                if ($user_mode) {
+                    unlink($filename);
+                    if (file_exists($filename . '.bak')) rename($filename . '.bak', $filename);
+                }
+                if ($success) {
+                    $app->log('Restored web backup ' . $full_filename, LOGLEVEL_DEBUG);
+                    $result = true;
+                } else {
+                    $app->log('Failed to restore web backup ' . $full_filename . ', exit code ' . $retval, LOGLEVEL_ERROR);
+                }
             }
-            $app->system->web_folder_protection($web_root, true);
         } else {
-            $app->log('Failed to restore web backup ' . $full_filename . ', backup format not recognized.', LOGLEVEL_DEBUG);
+            $app->log('Failed to restore web backup ' . $full_filename . ', backup mode "' . $backup_mode . '" not recognized.', LOGLEVEL_DEBUG);
         }
+        $app->system->web_folder_protection($web_root, true);
         return $result;
     }
+
+    /**
+     * Deletes backup copy
+     * @param string $backup_format
+     * @param string $backup_password
+     * @param string $backup_dir
+     * @param string $filename
+     * @param string $backup_mode
+     * @param string $backup_type
+     * @param int $domain_id
+     * @param bool true on success
+     * @author Jorge Muñoz <elgeorge2k@gmail.com>
+     */
+    public static function deleteBackup($backup_format, $backup_password, $backup_dir, $filename, $backup_mode, $backup_type, $domain_id) {
+        global $app, $conf;
+        $server_id = $conf['server_id'];
+        $success = false;
+
+        if (empty($backup_format) || $backup_format == 'default') {
+            $backup_format = self::getDefaultBackupFormat($backup_mode, $backup_type);
+        }
+        if(self::backupModeIsRepos($backup_mode)) {
+            $repos_password = '';
+            $backup_archive = $filename;
+            $backup_repos_folder = self::getBackupReposFolder($backup_mode, $backup_type);
+            if ($backup_type != 'web') {
+                preg_match('@^(manual-)?db_(?P<db>.+)_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}$@', $backup_archive, $matches);
+                if (!isset($matches['db']) || empty($matches['db'])) {
+                    $app->log('Failed to detect database name during delete of ' . $backup_archive, LOGLEVEL_ERROR);
+                    return false;
+                }
+                $db_name = $matches['db'];
+                $backup_repos_folder .= '_' . $db_name;
+            }
+            $backup_repos_path = $backup_dir . '/' . $backup_repos_folder;
+            $archives = self::getReposArchives($backup_mode, $backup_repos_path, $repos_password);
+            if (is_array($archives) && in_array($backup_archive, $archives)) {
+                $success = self::deleteArchive($backup_mode, $backup_repos_path, $backup_archive, $repos_password);
+            } else {
+                $success = true;
+            }
+        } else {
+            if(file_exists($backup_dir.'/'.$filename) && !stristr($backup_dir.'/'.$filename, '..') && !stristr($backup_dir.'/'.$filename, 'etc')) {
+                $success = unlink($backup_dir.'/'.$filename);
+            } else {
+                $success = true;
+            }
+        }
+        if ($success) {
+            $sql = "DELETE FROM web_backup WHERE server_id = ? AND parent_domain_id = ? AND filename = ?";
+            $app->db->query($sql, $server_id, $domain_id, $filename);
+            if($app->db->dbHost != $app->dbmaster->dbHost)
+                $app->dbmaster->query($sql, $server_id, $domain_id, $filename);
+            $app->log($sql . ' - ' . json_encode([$server_id, $domain_id, $filename]), LOGLEVEL_DEBUG);
+        }
+        return $success;
+    }
+    /**
+     * Downloads the backup copy
+     * @param string $backup_format
+     * @param string $password
+     * @param string $backup_dir
+     * @param string $filename
+     * @param string $backup_mode
+     * @param string $backup_type
+     * @param array $domain web_domain record
+     * @param bool true on success
+     * @author Jorge Muñoz <elgeorge2k@gmail.com>
+     */
+    public static function downloadBackup($backup_format, $password, $backup_dir, $filename, $backup_mode, $backup_type, $domain)
+    {
+        global $app;
+
+        $success = false;
+
+        if (self::backupModeIsRepos($backup_mode)) {
+            $backup_archive = $filename;
+            //When stored in repos, we first get target backup format to generate final download file
+            $repos_password = '';
+            $server_id = $domain['server_id'];
+            $password = $domain['backup_encrypt'] == 'y' ? trim($domain['backup_password']) : '';
+            $server_config = $app->getconf->get_server_config($server_id, 'server');
+            $backup_tmp = trim($server_config['backup_tmp']);
+
+            if ($backup_type == 'web') {
+                $backup_format = $domain['backup_format_web'];
+                if (empty($backup_format) || $backup_format == 'default') {
+                    $backup_format = self::getDefaultBackupFormat($server_backup_mode, 'web');
+                }
+                $backup_repos_folder = self::getBackupReposFolder($backup_mode, 'web');
+                $extension = self::getBackupWebExtension($backup_format);
+            } else {
+                if (preg_match('@^(manual-)?db_(?P<db>.+)_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}$@', $backup_archive, $matches)) {
+                    $db_name = $matches['db'];
+                    $backup_format = $domain['backup_format_db'];
+                    if (empty($backup_format)) {
+                        $backup_format = self::getDefaultBackupFormat($server_backup_mode, $backup_type);
+                    }
+                    $backup_repos_folder = self::getBackupReposFolder($backup_mode, $backup_type) . '_' . $db_name;
+                    $extension = self::getBackupDbExtension($backup_format);
+                } else {
+                    $app->log('Failed to detect database name during download of ' . $backup_archive, LOGLEVEL_ERROR);
+                    $db_name = null;
+                }
+            }
+            if ( ! empty($extension)) {
+                $filename .= $extension;
+                $backup_repos_path = $backup_dir . '/' . $backup_repos_folder;
+                $full_archive_path = $backup_repos_path . '::' . $backup_archive;
+                $archives = self::getReposArchives($backup_mode, $backup_repos_path, $repos_password);
+            } else {
+                $archives = null;
+            }
+            if (is_array($archives)) {
+                if (in_array($backup_archive, $archives)) {
+                    $app->log('Extracting ' . $backup_type . ' backup from repository archive '.$full_archive_path. ' to ' . $domain['document_root'].'/backup/' . $filename, LOGLEVEL_DEBUG);
+                    switch ($backup_mode) {
+                        case 'borg':
+                            if ($backup_type == 'mysql') {
+                                if (strpos($extension, '.sql.gz') === 0 || strpos($extension, '.sql.bz2') === 0) {
+                                    //* .sql.gz and .sql.bz2 don't need a source file, so we can just pipe through the compression command
+                                    $ccmd = strpos($extension, '.sql.gz') === 0 ? 'gzip' : 'bzip2';
+                                    $command = self::getBorgCommand('borg extract', $repos_password) . ' --stdout ? stdin | ' . $ccmd . ' -c > ?';
+                                    $success = $app->system->exec_safe($command, $full_archive_path, $domain['document_root'].'/backup/'.$filename) == 0;
+                                } else {
+                                    $tmp_extract = $backup_tmp . '/' . $backup_archive . '.sql';
+                                    if (file_exists($tmp_extract)) {
+                                        unlink($tmp_extract);
+                                    }
+                                    $command = self::getBorgCommand('borg extract', $repos_password) . ' --stdout ? stdin > ?';
+                                    $app->system->exec_safe($command, $full_archive_path, $tmp_extract);
+                                }
+                            } else {
+                                if (strpos($extension, '.tar') === 0 && ($password == '' || strpos($extension, '.tar.7z') !== 0)) {
+                                    //* .tar.gz, .tar.bz2, etc are supported via borg export-tar, if they don't need encryption
+                                    $command = self::getBorgCommand('borg export-tar', $repos_password) . ' ? ?';
+                                    $app->system->exec_safe($command, $full_archive_path, $domain['document_root'].'/backup/'.$filename);
+                                    $success = $app->system->last_exec_retcode() == 0;
+                                } else {
+                                    $tmp_extract = tempnam($backup_tmp, $backup_archive);
+                                    unlink($tmp_extract);
+                                    mkdir($tmp_extract);
+                                    $command = 'cd ' . $tmp_extract . ' && ' . self::getBorgCommand('borg extract --nobsdflags', $repos_password) . ' ?';
+                                    $app->system->exec_safe($command, $full_archive_path);
+                                    if ($app->system->last_exec_retcode() != 0) {
+                                        $app->log('Extraction of ' . $full_archive_path . ' into ' . $tmp_extract . ' failed.', LOGLEVEL_ERROR);
+                                        $tmp_extract = null;
+                                    }
+                                }
+                            }
+                            break;
+                    }
+                    if ( ! empty($tmp_extract)) {
+                        if (is_dir($tmp_extract)) {
+                            $web_config = $app->getconf->get_server_config($server_id, 'web');
+                            $http_server_user = $web_config['user'];
+                            $success = self::runWebCompression($backup_format, [], 'rootgz', $tmp_extract, $domain['document_root'].'/backup/', $filename, $domain['system_user'], $domain['system_group'], $http_server_user, $backup_tmp, $password);
+                        } else {
+                            self::runDatabaseCompression($backup_format, dirname($tmp_extract), basename($tmp_extract), $filename, $backup_tmp, $password)
+                                AND $success = rename(dirname($tmp_extract) . '/' . $filename, $domain['document_root'].'/backup/'. $filename);
+                        }
+                        if ($success) {
+                            $app->system->exec_safe('rm -Rf ?', $tmp_extract);
+                        } else {
+                             $app->log('Failed to run compression of ' . $tmp_extract . ' into ' . $domain['document_root'].'/backup/' . $filename . ' failed.', LOGLEVEL_ERROR);
+                        }
+                    }
+                } else {
+                    $app->log('Failed to find archive ' . $full_archive_path . ' for download', LOGLEVEL_ERROR);
+                }
+            }
+            if ($success) {
+                $app->log('Download of archive ' . $full_archive_path . ' into ' . $domain['document_root'].'/backup/'.$filename . ' succeeded.', LOGLEVEL_DEBUG);
+            }
+        }
+        //* Copy the backup file to the backup folder of the website
+        elseif(file_exists($backup_dir.'/'.$filename) && file_exists($domain['document_root'].'/backup/') && !stristr($backup_dir.'/'.$filename, '..') && !stristr($backup_dir.'/'.$filename, 'etc')) {
+            $success = copy($backup_dir.'/'.$filename, $domain['document_root'].'/backup/'.$filename);
+        }
+        if (file_exists($domain['document_root'].'/backup/'.$filename)) {
+            chgrp($domain['document_root'].'/backup/'.$filename, $domain['system_group']);
+            chown($domain['document_root'].'/backup/'.$filename, $domain['system_user']);
+            chmod($domain['document_root'].'/backup/'.$filename,0600);
+            $app->log('Ready '.$domain['document_root'].'/backup/'.$filename, LOGLEVEL_DEBUG);
+            return true;
+        } else {
+            $app->log('Failed download of '.$domain['document_root'].'/backup/'.$filename , LOGLEVEL_ERROR);
+            return false;
+        }
+    }
+
 
     /**
      * Returns a compression method, for example returns bzip2 for tar_7z_bzip2
@@ -689,6 +972,139 @@ class backup
     }
 
     /**
+     * Get borg command with password appended to the base command
+     * @param $command Base command to add password to
+     * @param $password Password to add
+     * @param $is_new Specify if command is for a new borg repository initialization
+     */
+    protected static function getBorgCommand($command, $password, $is_new = false)
+    {
+        if ($password) {
+            if ($is_new) {
+                return "BORG_NEW_PASSPHRASE='" . escapeshellarg($password) . "' " . $command;
+            }
+            return "BORG_PASSPHRASE='" . escapeshellarg($password) . "' " . $command;
+        }
+        return $command;
+    }
+    /**
+     * Obtains command line options for "borg create" command.
+     * @param string $compression Compression options are validated and fixed if necessary.
+     *      See: https://borgbackup.readthedocs.io/en/stable/internals/data-structures.html#compression
+     * @return string
+     * @author Jorge Muñoz <elgeorge2k@gmail.com>
+     */
+    protected static function getBorgCreateOptions($compression)
+    {
+        global $app;
+
+        //* Validate compression
+
+        $C = explode(',', $compression);
+        if (count($C) > 2) {
+            $app->log("Invalid compression option " . $C[2] . " from compression " . $compression . ".", LOGLEVEL_WARN);
+            $compression = $C[0] . ',' . $C[1];
+            $C = [$C[0], $C[1]];
+        }
+        if (count($C) > 1 && ! ctype_digit($C[1])) {
+            $app->log("Invalid compression option " . $C[1] . " from compression " . $compression . ".", LOGLEVEL_WARN);
+            $compression = $C[0];
+            $C = [$C[0]];
+        }
+
+        switch ($C[0]) {
+            case 'none':
+            case 'lz4':
+                if (count($C) > 1) {
+                    $app->log("Invalid compression format " . $compression . '. Defaulting to ' . $C[0] . '.', LOGLEVEL_WARN);
+                    $compression = $C[0];
+                }
+                break;
+            case 'zstd':
+                //* Check borg version
+                list(,$ver) = explode(' ', exec('borg --version'));
+                if (version_compare($ver, '1.1.4') < 0) {
+                    $app->log("Current borg version " . $ver . " does not support compression format " . $compression . '. Defaulting to zlib.', LOGLEVEL_WARN);
+                    $compression = 'zlib';
+                } elseif (count($C) > 1 && ($C[1] < 1 || $C[1] > 22)) {
+                    $app->log("Invalid compression format " . $compression . '. Defaulting to zstd.', LOGLEVEL_WARN);
+                    $compression = 'zstd';
+                }
+                break;
+            case 'zlib':
+            case 'lzma':
+                if (count($C) > 1 && ($C[1] < 0 || $C[1] > 9)) {
+                    $app->log("Invalid compression format " . $compression . '. Defaulting to ' . $C[0] . '.', LOGLEVEL_WARN);
+                    $compression = $C[0];
+                }
+                break;
+            default:
+                $app->log("Unsupported borg compression format " . $compression . '. Defaulting to zlib.', LOGLEVEL_WARN);
+                $compression = 'zlib';
+        }
+
+        $options = array(
+            /**
+             * -C --compression
+             */
+            '-C ' . $compression,
+            /**
+             * Excludes directories that contain CACHEDIR.TAG
+             */
+            '--exclude-caches',
+            /**
+             * specify the chunker parameters (CHUNK_MIN_EXP, CHUNK_MAX_EXP, HASH_MASK_BITS, HASH_WINDOW_SIZE).
+             * @see https://borgbackup.readthedocs.io/en/stable/internals/data-structures.html#chunker-details
+             * Default: 19,23,21,4095
+             */
+            //'--chunker-params 19,23,21,4095',
+        );
+        $options = implode(" ", $options);
+        return $options;
+    }
+
+    /**
+     * Gets a list of repository archives
+     * @param string $backup_mode
+     * @param string $repos_path absolute path to repository
+     * @param string $password repository password or empty string if none
+     * @param string $list_format Supports either 'short' or 'json'
+     * @return array
+     * @author Jorge Muñoz <elgeorge2k@gmail.com>
+     */
+    protected static function getReposArchives($backup_mode, $repos_path, $password, $list_format = 'short')
+    {
+        global $app;
+        if ( ! is_dir($repos_path)) {
+            $app->log("Unknown path " . var_export($repos_path, TRUE)
+                . ' called from ' . (function() {
+                    $dbt = debug_backtrace();
+                    return $dbt[1]['file'] . ':' . $dbt[1]['line'];
+                })(), LOGLEVEL_ERROR);
+            return FALSE;
+        }
+        switch ($backup_mode) {
+            case 'borg':
+
+                $command = self::getBorgCommand('borg list', $password);
+
+                if ($list_format == 'json') {
+                    $command_opts = '--json';
+                } else {
+                    $command_opts = '--short';
+                }
+
+                $app->system->exec_safe($command . ' ' . $command_opts . ' ?', $repos_path);
+
+                if ($app->system->last_exec_retcode() == 0) {
+                    return array_map('trim', $app->system->last_exec_out());
+                }
+                break;
+        }
+        return FALSE;
+    }
+
+    /**
      * Clears expired backups.
      * The backup directory must be mounted before calling this method.
      * @param integer $server_id
@@ -699,34 +1115,106 @@ class backup
      * @see backup_plugin::backups_garbage_collection() call this method first
      * @see backup_plugin::mount_backup_dir()
      * @author Ramil Valitov <ramilvalitov@gmail.com>
+     * @author Jorge Muñoz <elgeorge2k@gmail.com>
      */
     protected static function clearBackups($server_id, $web_id, $max_backup_copies, $backup_dir, $prefix_list=null)
     {
         global $app;
 
-        $files = self::get_files($backup_dir, $prefix_list);
-        usort($files, function ($a, $b) use ($backup_dir) {
-            $time_a = filemtime($backup_dir . '/' . $a);
-            $time_b = filemtime($backup_dir . '/' . $b);
-            return ($time_a > $time_b) ? -1 : 1;
-        });
+        $server_config = $app->getconf->get_server_config($server_id, 'server');
+        $backup_mode = $server_config['backup_mode'];
+        //@todo obtain password from server config
+        $password = NULL;
 
         $db_list = array($app->db);
         if ($app->db->dbHost != $app->dbmaster->dbHost)
             array_push($db_list, $app->dbmaster);
 
-        //Delete old files that are beyond the limit
-        for ($n = $max_backup_copies; $n < sizeof($files); $n++) {
-            $filename = $files[$n];
-            $full_filename = $backup_dir . '/' . $filename;
-            $app->log('Backup file ' . $full_filename . ' is beyond the limit of ' . $max_backup_copies . " copies and will be deleted from disk and database", LOGLEVEL_DEBUG);
-            $sql = "DELETE FROM web_backup WHERE server_id = ? AND parent_domain_id = ? AND filename = ?";
-            foreach ($db_list as $db) {
-                $db->query($sql, $server_id, $web_id, $filename);
+        if ($backup_mode == "userzip" || $backup_mode == "rootgz") {
+            $files = self::get_files($backup_dir, $prefix_list);
+            usort($files, function ($a, $b) use ($backup_dir) {
+                $time_a = filemtime($backup_dir . '/' . $a);
+                $time_b = filemtime($backup_dir . '/' . $b);
+                return ($time_a > $time_b) ? -1 : 1;
+            });
+
+            //Delete old files that are beyond the limit
+            for ($n = $max_backup_copies; $n < sizeof($files); $n++) {
+                $filename = $files[$n];
+                $full_filename = $backup_dir . '/' . $filename;
+                $app->log('Backup file ' . $full_filename . ' is beyond the limit of ' . $max_backup_copies . " copies and will be deleted from disk and database", LOGLEVEL_DEBUG);
+                $sql = "DELETE FROM web_backup WHERE server_id = ? AND parent_domain_id = ? AND filename = ?";
+                foreach ($db_list as $db) {
+                    $db->query($sql, $server_id, $web_id, $filename);
+                }
+                @unlink($full_filename);
             }
-            @unlink($full_filename);
+        } elseif (self::backupModeIsRepos($backup_mode)) {
+            $repos_archives = self::getAllArchives($backup_dir, $backup_mode, $password);
+            usort($repos_archives, function ($a, $b)  {
+                return ($a['created_at'] > $b['created_at']) ? -1 : 1;
+            });
+            //Delete old files that are beyond the limit
+            for ($n = $max_backup_copies; $n < sizeof($repos_archives); $n++) {
+                $archive = $repos_archives[$n];
+                $app->log('Backup archive ' . $archive['archive'] . ' is beyond the limit of ' . $max_backup_copies . " copies and will be deleted from disk and database", LOGLEVEL_DEBUG);
+                $sql = "DELETE FROM web_backup WHERE server_id = ? AND parent_domain_id = ? AND filename = ?";
+                foreach ($db_list as $db) {
+                    $db->query($sql, $server_id, $web_id, $archive['archive']);
+                }
+                $backup_repos_path = $backup_dir . '/' . $archive['repos'];
+                self::deleteArchive($backup_mode, $backup_repos_path, $archive['archive'], $password);
+            }
         }
         return true;
+    }
+
+    protected static function getAllArchives($backup_dir, $backup_mode, $password)
+    {
+        $d = dir($backup_dir);
+        $archives = [];
+        /**
+         * $archives[] = [
+         *      'repos'      => string,
+         *      'archive'    => string,
+         *      'created_at' => int,
+         * ];
+         */
+        while (false !== ($entry = $d->read())) {
+            if ('.' === $entry || '..' === $entry) {
+                continue;
+            }
+            switch ($backup_mode) {
+                case 'borg':
+                    $repos_path = $backup_dir . '/' . $entry;
+                    if (is_dir($repos_path) && strncmp('borg_', $entry, 5) === 0) {
+                        $archivesJson = json_decode(implode("", self::getReposArchives($backup_mode, $repos_path, $password, 'json')), TRUE);
+                        foreach ($archivesJson['archives'] as $archive) {
+                            $archives[] = [
+                                'repos'      => $entry,
+                                'archive'    => $archive['name'],
+                                'created_at' => strtotime($archive['time']),
+                            ];
+                        }
+                    }
+                    break;
+            }
+        }
+        return $archives;
+    }
+
+    protected static function deleteArchive($backup_mode, $backup_repos_path, $backup_archive, $password)
+    {
+        global $app;
+        $app->log("Delete Archive - repos = " . $backup_repos_path . ", archive = " . $backup_archive, LOGLEVEL_DEBUG);
+        switch ($backup_mode) {
+            case 'borg':
+                $app->system->exec_safe('borg delete ?', $backup_repos_path . '::' . $backup_archive);
+                return $app->system->last_exec_retcode() == 0;
+            default:
+                $app->log("Unknown repos type " . $backup_mode, LOGLEVEL_ERROR);
+        }
+        return FALSE;
     }
 
     /**
@@ -748,7 +1236,7 @@ class backup
         $args_sql_domains_with_backups = array();
         $server_config = $app->getconf->get_server_config($server_id, 'server');
         $backup_dir = trim($server_config['backup_dir']);
-        $sql = "SELECT * FROM web_backup WHERE server_id = ?";
+        $sql = "SELECT * FROM web_backup WHERE server_id = ? AND backup_mode != 'borg'";
         $sql_domains = "SELECT domain_id,document_root,system_user,system_group,backup_interval FROM web_domain WHERE server_id = ? AND (type = 'vhost' OR type = 'vhostsubdomain' OR type = 'vhostalias')";
         $sql_domains_with_backups = "SELECT domain_id,document_root,system_user,system_group,backup_interval FROM web_domain WHERE domain_id in (SELECT parent_domain_id FROM web_backup WHERE server_id = ?" . ((!empty($backup_type)) ? " AND backup_type = ?" : "") . ") AND (type = 'vhost' OR type = 'vhostsubdomain' OR type = 'vhostalias')";
         array_push($args_sql, $server_id);
@@ -772,7 +1260,7 @@ class backup
         if ($app->db->dbHost != $app->dbmaster->dbHost)
             array_push($db_list, $app->dbmaster);
 
-	// Cleanup web_backup entries for non-existent backup files
+        // Cleanup web_backup entries for non-existent backup files
         foreach ($db_list as $db) {
             $backups = $app->db->queryAllRecords($sql, true, $args_sql);
             foreach ($backups as $backup) {
@@ -785,7 +1273,7 @@ class backup
             }
         }
 
-	// Cleanup backup files with missing web_backup entries (runs on all servers)
+        // Cleanup backup files with missing web_backup entries (runs on all servers)
         $domains = $app->dbmaster->queryAllRecords($sql_domains_with_backups, true, $args_sql_domains_with_backups);
         foreach ($domains as $rec) {
             $domain_id = $rec['domain_id'];
@@ -795,7 +1283,7 @@ class backup
             if (!empty($files)) {
                 // leave out server_id here, in case backup storage is shared between servers
                 $sql = "SELECT backup_id, filename FROM web_backup WHERE parent_domain_id = ?";
-		$untracked_backup_files = array();
+                $untracked_backup_files = array();
                 foreach ($db_list as $db) {
                     $backups = $db->queryAllRecords($sql, $domain_id);
                     foreach ($backups as $backup) {
@@ -804,8 +1292,8 @@ class backup
                         }
                     }
                 }
-		array_unique( $untracked_backup_files );
-		foreach ($untracked_backup_files as $f) {
+                array_unique( $untracked_backup_files );
+                foreach ($untracked_backup_files as $f) {
                     $backup_file = $backup_dir . '/web' . $domain_id . '/' . $f;
                     $app->log('Backup file ' . $backup_file . ' is not contained in database, deleting this file from disk', LOGLEVEL_DEBUG);
                     @unlink($backup_file);
@@ -813,7 +1301,7 @@ class backup
             }
         }
 
-	// This cleanup only runs on web servers
+        // This cleanup only runs on web servers
         $domains = $app->db->queryAllRecords($sql_domains, true, $args_sql_domains);
         foreach ($domains as $rec) {
             $domain_id = $rec['domain_id'];
@@ -854,6 +1342,15 @@ class backup
                 $dir_handle->close();
             }
         }
+    }
+
+    protected static function getReposFolder($backup_mode, $backup_type, $postfix = '')
+    {
+        switch ($backup_mode) {
+            case 'borg':
+                return 'borg_' . $backup_type . $postfix;
+        }
+        return null;
     }
 
     /**
@@ -923,6 +1420,48 @@ class backup
     }
 
     /**
+     * Gets list of directories in directory
+     * @param string $directory
+     * @param string[]|null $prefix_list filter files that have one of the prefixes. Use null for default filtering.
+     * @return string[]
+     * @author Ramil Valitov <ramilvalitov@gmail.com>
+     */
+    protected static function get_dirs($directory, $prefix_list = null, $endings_list = null)
+    {
+        $default_prefix_list = array(
+            'borg',
+        );
+        if (is_null($prefix_list))
+            $prefix_list = $default_prefix_list;
+
+        if (!is_dir($directory)) {
+            return array();
+        }
+
+        $dir_handle = dir($directory);
+        $dirs = array();
+        while (false !== ($entry = $dir_handle->read())) {
+            $full_dirname = $directory . '/' . $entry;
+            if ($entry != '.' && $entry != '..' && is_dir($full_dirname)) {
+                if (!empty($prefix_list)) {
+                    $add = false;
+                    foreach ($prefix_list as $prefix) {
+                        if (substr($entry, 0, strlen($prefix)) == $prefix) {
+                            $add = true;
+                            break;
+                        }
+                    }
+                } else
+                    $add = true;
+                if ($add)
+                    array_push($dirs, $entry);
+            }
+        }
+        $dir_handle->close();
+
+        return $dirs;
+    }
+    /**
      * Generates excludes list for compressors
      * @param string[] $backup_excludes
      * @param string $arg
@@ -935,7 +1474,7 @@ class backup
     {
         $excludes = "";
         foreach ($backup_excludes as $ex) {
-	    # pass through escapeshellarg if not already done
+            # pass through escapeshellarg if not already done
             if ( preg_match( "/^'.+'$/", $ex ) ) {
                 $excludes .= "${arg}${pre}${ex}${post} ";
             } else {
@@ -1167,6 +1706,7 @@ class backup
      * @param string $backup_job type of backup job: manual or auto
      * @return bool true if success
      * @author Ramil Valitov <ramilvalitov@gmail.com>
+     * @author Jorge Muñoz <elgeorge2k@gmail.com>
      * @see backup_plugin::run_backup() recommeneded to use if you need to make backups
      */
     protected static function make_database_backup($web_domain, $backup_job)
@@ -1176,6 +1716,7 @@ class backup
         $server_id = intval($web_domain['server_id']);
         $domain_id = intval($web_domain['domain_id']);
         $server_config = $app->getconf->get_server_config($server_id, 'server');
+        $backup_mode = $server_config['backup_mode'];
         $backup_dir = trim($server_config['backup_dir']);
         $backup_tmp = trim($server_config['backup_tmp']);
         $db_backup_dir = $backup_dir . '/web' . $domain_id;
@@ -1200,67 +1741,118 @@ class backup
         unset($tmp);
 
         foreach ($records as $rec) {
-            $password = ($web_domain['backup_encrypt'] == 'y') ? trim($web_domain['backup_password']) : '';
-            $backup_format_db = $web_domain['backup_format_db'];
-            if (empty($backup_format_db)) {
-                $backup_format_db = 'gzip';
-            }
-            $backup_extension_db = self::getBackupDbExtension($backup_format_db);
-
-            if (!empty($backup_extension_db)) {
-                //* Do the mysql database backup with mysqldump
+            if (self::backupModeIsRepos($backup_mode)) {
+                //@todo get $password from server config
+                $repos_password = '';
+                //@todo get compression from server config
+                $compression = 'zlib';
                 $db_name = $rec['database_name'];
-                $db_file_prefix = 'db_' . $db_name . '_' . date('Y-m-d_H-i');
-                $db_backup_file = $db_file_prefix . '.sql';
-                $db_compressed_file = ($backup_job == 'manual' ? 'manual-' : '') . $db_file_prefix . $backup_extension_db;
-                $command = "mysqldump -h ? -u ? -p? -c --add-drop-table --create-options --quick --max_allowed_packet=512M " . $mysqldump_routines . " --result-file=? ?";
-                /** @var string $clientdb_host */
-                /** @var string $clientdb_user */
-                /** @var string $clientdb_password */
-                $app->system->exec_safe($command, $clientdb_host, $clientdb_user, $clientdb_password, $db_backup_dir . '/' . $db_backup_file, $db_name);
-                $exit_code = $app->system->last_exec_retcode();
-
-                //* Compress the backup
-                if ($exit_code == 0) {
-                    $exit_code = self::runDatabaseCompression($backup_format_db, $db_backup_dir, $db_backup_file, $db_compressed_file, $backup_tmp, $password) ? 0 : 1;
-                    if ($exit_code !== 0)
-                        $app->log('Failed to make backup of database ' . $rec['database_name'], LOGLEVEL_ERROR);
-                } else {
-                    $app->log('Failed to make backup of database ' . $rec['database_name'] . ', because mysqldump failed', LOGLEVEL_ERROR);
-                }
-
-                if ($exit_code == 0) {
-                    if (is_file($db_backup_dir . '/' . $db_compressed_file)) {
-                        chmod($db_backup_dir . '/' . $db_compressed_file, 0750);
-                        chown($db_backup_dir . '/' . $db_compressed_file, fileowner($db_backup_dir));
-                        chgrp($db_backup_dir . '/' . $db_compressed_file, filegroup($db_backup_dir));
-
-                        //* Insert web backup record in database
-                        $file_size = filesize($db_backup_dir . '/' . $db_compressed_file);
-                        $sql = "INSERT INTO web_backup (server_id, parent_domain_id, backup_type, backup_mode, backup_format, tstamp, filename, filesize, backup_password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                        //Making compatible with previous versions of ISPConfig:
-                        $sql_mode = ($backup_format_db == 'gzip') ? 'sqlgz' : ('sql' . $backup_format_db);
-                        $app->db->query($sql, $server_id, $domain_id, 'mysql', $sql_mode, $backup_format_db, time(), $db_compressed_file, $file_size, $password);
-                        if ($app->db->dbHost != $app->dbmaster->dbHost)
-                            $app->dbmaster->query($sql, $server_id, $domain_id, 'mysql', $sql_mode, $backup_format_db, time(), $db_compressed_file, $file_size, $password);
-                        $success = true;
+                $db_repos_folder = self::getBackupReposFolder($backup_mode, 'mysql') . '_' . $db_name;
+                $backup_repos_path = $db_backup_dir . '/' . $db_repos_folder;
+                $backup_format_db = '';
+                if (self::prepareRepos($backup_mode, $backup_repos_path, $repos_password)) {
+                    $db_backup_archive = ($backup_job == 'manual' ? 'manual-' : '') . 'db_' . $db_name . '_' . date('Y-m-d_H-i');
+                    $full_archive_path = $backup_repos_path . '::' . $db_backup_archive;
+                    $dump_command = "mysqldump -h ? -u ? -p? -c --add-drop-table --create-options --quick --max_allowed_packet=512M " . $mysqldump_routines . " ?";
+                    switch ($backup_mode) {
+                        case 'borg':
+                            $borg_cmd = self::getBorgCommand('borg create', $repos_password);
+                            $borg_options = self::getBorgCreateOptions($compression);
+                            $command = $dump_command . ' | ' . $borg_cmd . ' ' . $borg_options . ' ? -';
+                            /** @var string $clientdb_host */
+                            /** @var string $clientdb_user */
+                            /** @var string $clientdb_password */
+                            $app->system->exec_safe($command,
+                                $clientdb_host, $clientdb_user, $clientdb_password, $db_name, #mysqldump command part
+                                $full_archive_path #borg command part
+                            );
+                            $exit_code = $app->system->last_exec_retcode();
+                            break;
+                    }
+                    if ($exit_code == 0) {
+                        $archive_size = self::getReposArchiveSize($backup_mode, $backup_repos_path, $db_backup_archive, $repos_password);
+                        if ($archive_size !== false) {
+                            //* Insert web backup record in database
+                            $sql = "INSERT INTO web_backup (server_id, parent_domain_id, backup_type, backup_mode, backup_format, tstamp, filename, filesize, backup_password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                            //* password is for `Encrypted` column informative purposes, on download password is obtained from web_domain settings
+                            $password = $repos_password ? '*secret*' : '';
+                            $app->db->query($sql, $server_id, $domain_id, 'mysql', $backup_mode, $backup_format_db, time(), $db_backup_archive, $archive_size, $password);
+                            if ($app->db->dbHost != $app->dbmaster->dbHost)
+                                $app->dbmaster->query($sql, $server_id, $domain_id, 'mysql', $backup_mode, $backup_format_db, time(), $db_backup_archive, $archive_size, $password);
+                            $success = true;
+                        } else {
+                            $app->log('Failed to obtain backup size of ' . $full_archive_path . ' for database ' . $rec['database_name'], LOGLEVEL_ERROR);
+                            return false;
+                        }
+                    } else {
+                        rename($backup_repos_path, $new_path = $backup_repos_path . '_failed_' . uniqid());
+                        $app->log('Failed to process mysql backup format ' . $backup_format_db . ' for database ' . $rec['database_name'] . ' repos renamed to ' . $new_path, LOGLEVEL_ERROR);
                     }
                 } else {
-                    if (is_file($db_backup_dir . '/' . $db_compressed_file)) unlink($db_backup_dir . '/' . $db_compressed_file);
+                    $app->log('Failed to initialize repository for database ' . $rec['database_name'] . ', folder ' . $backup_repos_path . ', backup mode ' . $backup_mode . '.', LOGLEVEL_ERROR);
                 }
-                //* Remove the uncompressed file
-                if (is_file($db_backup_dir . '/' . $db_backup_file)) unlink($db_backup_dir . '/' . $db_backup_file);
-
-                //* Remove old backups
-                self::backups_garbage_collection($server_id, 'mysql', $domain_id);
-                $prefix_list = array(
-                            "db_${db_name}_",
-                            "manual-db_${db_name}_",
-                        );
-                self::clearBackups($server_id, $domain_id, intval($rec['backup_copies']), $db_backup_dir, $prefix_list);
             } else {
-                $app->log('Failed to process mysql backup format ' . $backup_format_db . ' for database ' . $rec['database_name'], LOGLEVEL_ERROR);
+                $password = ($web_domain['backup_encrypt'] == 'y') ? trim($web_domain['backup_password']) : '';
+                $backup_format_db = $web_domain['backup_format_db'];
+                if (empty($backup_format_db)) {
+                    $backup_format_db = 'gzip';
+                }
+                $backup_extension_db = self::getBackupDbExtension($backup_format_db);
+
+                if (!empty($backup_extension_db)) {
+                    //* Do the mysql database backup with mysqldump
+                    $db_name = $rec['database_name'];
+                    $db_file_prefix = 'db_' . $db_name . '_' . date('Y-m-d_H-i');
+                    $db_backup_file = $db_file_prefix . '.sql';
+                    $db_compressed_file = ($backup_job == 'manual' ? 'manual-' : '') . $db_file_prefix . $backup_extension_db;
+                    $command = "mysqldump -h ? -u ? -p? -c --add-drop-table --create-options --quick --max_allowed_packet=512M " . $mysqldump_routines . " --result-file=? ?";
+                    /** @var string $clientdb_host */
+                    /** @var string $clientdb_user */
+                    /** @var string $clientdb_password */
+                    $app->system->exec_safe($command, $clientdb_host, $clientdb_user, $clientdb_password, $db_backup_dir . '/' . $db_backup_file, $db_name);
+                    $exit_code = $app->system->last_exec_retcode();
+
+                    //* Compress the backup
+                    if ($exit_code == 0) {
+                        $exit_code = self::runDatabaseCompression($backup_format_db, $db_backup_dir, $db_backup_file, $db_compressed_file, $backup_tmp, $password) ? 0 : 1;
+                        if ($exit_code !== 0)
+                            $app->log('Failed to make backup of database ' . $rec['database_name'], LOGLEVEL_ERROR);
+                    } else {
+                        $app->log('Failed to make backup of database ' . $rec['database_name'] . ', because mysqldump failed', LOGLEVEL_ERROR);
+                    }
+
+                    if ($exit_code == 0) {
+                        if (is_file($db_backup_dir . '/' . $db_compressed_file)) {
+                            chmod($db_backup_dir . '/' . $db_compressed_file, 0750);
+                            chown($db_backup_dir . '/' . $db_compressed_file, fileowner($db_backup_dir));
+                            chgrp($db_backup_dir . '/' . $db_compressed_file, filegroup($db_backup_dir));
+
+                            //* Insert web backup record in database
+                            $file_size = filesize($db_backup_dir . '/' . $db_compressed_file);
+                            $sql = "INSERT INTO web_backup (server_id, parent_domain_id, backup_type, backup_mode, backup_format, tstamp, filename, filesize, backup_password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                            //Making compatible with previous versions of ISPConfig:
+                            $sql_mode = ($backup_format_db == 'gzip') ? 'sqlgz' : ('sql' . $backup_format_db);
+                            $app->db->query($sql, $server_id, $domain_id, 'mysql', $sql_mode, $backup_format_db, time(), $db_compressed_file, $file_size, $password);
+                            if ($app->db->dbHost != $app->dbmaster->dbHost)
+                                $app->dbmaster->query($sql, $server_id, $domain_id, 'mysql', $sql_mode, $backup_format_db, time(), $db_compressed_file, $file_size, $password);
+                            $success = true;
+                        }
+                    } else {
+                        if (is_file($db_backup_dir . '/' . $db_compressed_file)) unlink($db_backup_dir . '/' . $db_compressed_file);
+                    }
+                    //* Remove the uncompressed file
+                    if (is_file($db_backup_dir . '/' . $db_backup_file)) unlink($db_backup_dir . '/' . $db_backup_file);
+                }  else {
+                    $app->log('Failed to process mysql backup format ' . $backup_format_db . ' for database ' . $rec['database_name'], LOGLEVEL_ERROR);
+                }
             }
+            //* Remove old backups
+            self::backups_garbage_collection($server_id, 'mysql', $domain_id);
+            $prefix_list = array(
+                        "db_${db_name}_",
+                        "manual-db_${db_name}_",
+                    );
+            self::clearBackups($server_id, $domain_id, intval($rec['backup_copies']), $db_backup_dir, $prefix_list);
         }
 
         unset($clientdb_host);
@@ -1278,6 +1870,7 @@ class backup
      * @param string $backup_job type of backup job: manual or auto
      * @return bool true if success
      * @author Ramil Valitov <ramilvalitov@gmail.com>
+     * @author Jorge Muñoz <elgeorge2k@gmail.com>
      * @see backup_plugin::mount_backup_dir()
      * @see backup_plugin::run_backup() recommeneded to use if you need to make backups
      */
@@ -1328,11 +1921,11 @@ class backup
         self::prepare_backup_dir($server_id, $web_domain);
         $web_backup_dir = $backup_dir . '/web' . $web_id;
 
-	# default exclusions
-	$backup_excludes = array(
-		'./backup*',
-		'./bin', './dev', './etc', './lib', './lib32', './lib64', './opt', './sys', './usr', './var', './proc', './run', './tmp',
-		);
+        # default exclusions
+        $backup_excludes = array(
+            './backup*',
+            './bin', './dev', './etc', './lib', './lib32', './lib64', './opt', './sys', './usr', './var', './proc', './run', './tmp',
+        );
 
         $b_excludes = explode(',', trim($web_domain['backup_excludes']));
         if (is_array($b_excludes) && !empty($b_excludes)) {
@@ -1343,41 +1936,215 @@ class backup
                 }
             }
         }
+        if (self::backupModeIsRepos($backup_mode)) {
+            $backup_format_web = '';
+            $web_backup_archive = ($backup_job == 'manual' ? 'manual-' : '') . 'web' . $web_id . '_' . date('Y-m-d_H-i');
+            $backup_repos_folder = self::getBackupReposFolder($backup_mode, 'web');
 
-        $web_backup_file = ($backup_job == 'manual' ? 'manual-' : '') . 'web' . $web_id . '_' . date('Y-m-d_H-i') . $backup_extension_web;
-        $full_filename = $web_backup_dir . '/' . $web_backup_file;
-        if (self::runWebCompression($backup_format_web, $backup_excludes, $backup_mode, $web_path, $web_backup_dir, $web_backup_file, $web_user, $web_group, $http_server_user, $backup_tmp, $password)) {
-            if (is_file($full_filename)) {
-                $backup_username = ($global_config['backups_include_into_web_quota'] == 'y') ? $web_user : 'root';
-                $backup_group = ($global_config['backups_include_into_web_quota'] == 'y') ? $web_group : 'root';
-                chown($full_filename, $backup_username);
-                chgrp($full_filename, $backup_group);
-                chmod($full_filename, 0750);
+            $backup_repos_path = $web_backup_dir . '/' . $backup_repos_folder;
+            $full_archive_path = $backup_repos_path . '::' . $web_backup_archive;
+            /**
+             * @todo the internal borg password can't be the backup instance $password because the repos shares all backups
+             * in a period of time. Instead we'll set the backup password on backup file download.
+             */
+            $repos_password = '';
+            //@todo get this from the server config perhaps
+            $compression = 'zlib';
 
-                //Insert web backup record in database
-                $file_size = filesize($full_filename);
-                $sql = "INSERT INTO web_backup (server_id, parent_domain_id, backup_type, backup_mode, backup_format, tstamp, filename, filesize, backup_password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                $app->db->query($sql, $server_id, $web_id, 'web', $backup_mode, $backup_format_web, time(), $web_backup_file, $file_size, $password);
-                if ($app->db->dbHost != $app->dbmaster->dbHost)
-                    $app->dbmaster->query($sql, $server_id, $web_id, 'web', $backup_mode, $backup_format_web, time(), $web_backup_file, $file_size, $password);
-                unset($file_size);
-                $app->log('Backup of web files for domain ' . $web_domain['domain'] . ' completed successfully to file ' . $full_filename, LOGLEVEL_DEBUG);
-            } else {
-                $app->log('Backup of web files for domain ' . $web_domain['domain'] . ' reported success, but the resulting file ' . $full_filename . ' not found.', LOGLEVEL_ERROR);
+            if ( ! self::prepareRepos($backup_mode, $backup_repos_path, $repos_password)) {
+                $app->log('Backup of web files for domain ' . $web_domain['domain'] . ' using path ' . $backup_repos_path . ' failed. Unable to prepare repository for ' . $backup_mode, LOGLEVEL_ERROR);
+                return FALSE;
+            }
+            #we wont use tar to be able to speed up things and extract specific files easily
+            #$find_user_files = 'cd ? && find . -group ? -or -user ? -print 2> /dev/null';
+            $excludes = backup::generateExcludeList($backup_excludes, '--exclude ');
+            $success = false;
+
+            $app->log('Performing web files backup of ' . $web_path . ', mode ' . $backup_mode, LOGLEVEL_DEBUG);
+            switch ($backup_mode) {
+                case 'borg':
+                    $command = self::getBorgCommand('borg create', $repos_password);
+                    $command_opts = self::getBorgCreateOptions($compression);
+
+                    $app->system->exec_safe(
+                        'cd ? && ' . $command . ' ' . $command_opts . ' ' . $excludes . ' ? .',
+                        $web_path, $backup_repos_path . '::' . $web_backup_archive
+                    );
+                    $success = $app->system->last_exec_retcode() == 0;
             }
 
+            if ($success) {
+                $backup_username = ($global_config['backups_include_into_web_quota'] == 'y') ? $web_user : 'root';
+                $backup_group = ($global_config['backups_include_into_web_quota'] == 'y') ? $web_group : 'root';
+    
+                //Insert web backup record in database
+                $archive_size = self::getReposArchiveSize($backup_mode, $backup_repos_path, $web_backup_archive, $repos_password);
+                $password = $repos_password ? '*secret*' : '';
+                $sql = "INSERT INTO web_backup (server_id, parent_domain_id, backup_type, backup_mode, backup_format, tstamp, filename, filesize, backup_password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                $backup_time = time();
+                $app->db->query($sql, $server_id, $web_id, 'web', $backup_mode, $backup_format_web, $backup_time, $web_backup_archive, $archive_size, $password);
+                if ($app->db->dbHost != $app->dbmaster->dbHost)
+                    $app->dbmaster->query($sql, $server_id, $web_id, 'web', $backup_mode, $backup_format_web, $backup_time, $web_backup_archive, $archive_size, $password);
+                unset($archive_size);
+                $app->log('Backup of web files for domain ' . $web_domain['domain'] . ' completed successfully to archive ' . $full_archive_path, LOGLEVEL_DEBUG);
+            } else {
+                $app->log('Backup of web files for domain ' . $web_domain['domain'] . ' using path ' . $web_path . ' failed.', LOGLEVEL_ERROR);
+            }
         } else {
-            if (is_file($full_filename))
-                unlink($full_filename);
-            $app->log('Backup of web files for domain ' . $web_domain['domain'] . ' failed using path ' . $web_path . ' failed.', LOGLEVEL_ERROR);
+            $web_backup_file = ($backup_job == 'manual' ? 'manual-' : '') . 'web' . $web_id . '_' . date('Y-m-d_H-i') . $backup_extension_web;
+            $full_filename = $web_backup_dir . '/' . $web_backup_file;
+            if (self::runWebCompression($backup_format_web, $backup_excludes, $backup_mode, $web_path, $web_backup_dir, $web_backup_file, $web_user, $web_group, $http_server_user, $backup_tmp, $password)) {
+                if (is_file($full_filename)) {
+                    $backup_username = ($global_config['backups_include_into_web_quota'] == 'y') ? $web_user : 'root';
+                    $backup_group = ($global_config['backups_include_into_web_quota'] == 'y') ? $web_group : 'root';
+                    chown($full_filename, $backup_username);
+                    chgrp($full_filename, $backup_group);
+                    chmod($full_filename, 0750);
+
+                    //Insert web backup record in database
+                    $file_size = filesize($full_filename);
+                    $sql = "INSERT INTO web_backup (server_id, parent_domain_id, backup_type, backup_mode, backup_format, tstamp, filename, filesize, backup_password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    $app->db->query($sql, $server_id, $web_id, 'web', $backup_mode, $backup_format_web, time(), $web_backup_file, $file_size, $password);
+                    if ($app->db->dbHost != $app->dbmaster->dbHost)
+                        $app->dbmaster->query($sql, $server_id, $web_id, 'web', $backup_mode, $backup_format_web, time(), $web_backup_file, $file_size, $password);
+                    unset($file_size);
+                    $app->log('Backup of web files for domain ' . $web_domain['domain'] . ' completed successfully to file ' . $full_filename, LOGLEVEL_DEBUG);
+                } else {
+                    $app->log('Backup of web files for domain ' . $web_domain['domain'] . ' reported success, but the resulting file ' . $full_filename . ' not found.', LOGLEVEL_ERROR);
+                }
+
+            } else {
+                if (is_file($full_filename))
+                    unlink($full_filename);
+                $app->log('Backup of web files for domain ' . $web_domain['domain'] . ' failed using path ' . $web_path . ' failed.', LOGLEVEL_ERROR);
+            }
         }
 
-	$prefix_list = array(
-		    'web',
-		    'manual-web',
-		);
+        $prefix_list = array(
+            'web',
+            'manual-web',
+        );
         self::clearBackups($server_id, $web_id, intval($web_domain['backup_copies']), $web_backup_dir, $prefix_list);
         return true;
+    }
+
+    protected static function getBackupReposFolder($backup_mode, $backup_type)
+    {
+        switch ($backup_mode) {
+            case 'borg': return 'borg_' . $backup_type;
+        }
+        return null;
+    }
+
+    /**
+     * Prepares repository for backup. Initialization, etc.
+     */
+    protected static function prepareRepos($backup_mode, $repos_path, $password)
+    {
+        global $app;
+        if (is_dir($repos_path)) {
+            self::getReposArchives($backup_mode, $repos_path, $password);
+            if ($app->system->last_exec_retcode() == 0) {
+                return true;
+            }
+            if ($app->system->last_exec_retcode() == 2 && preg_match('/passphrase supplied in.*is incorrect/', $app->system->last_exec_out()[0])) {
+                //Password was updated, so we rename folder and alert the event.
+                $repos_stat = stat($repos_path);
+                $mtime = $repos_stat['mtime'];
+                $new_repo_path = $repos_path . '_' . date('Y-m-d_H-i', $mtime);
+                rename($repos_path, $new_repo_name);
+                $app->log('Backup of web files for domain ' . $web_domain['domain'] . ' are encrypted under a different password. Original repos was moved to ' . $new_repo_name, LOGLEVEL_WARN);
+            } else {
+                return false;
+            }
+        }
+        switch ($backup_mode) {
+            case 'borg':
+                if ($password) {
+                    $command = self::getBorgCommand('borg init', $password, true);
+                    $app->system->exec_safe($command . ' --make-parent-dirs -e authenticated ?', $repos_path);
+                } else {
+                    $app->system->exec_safe('borg init --make-parent-dirs -e none ?', $repos_path);
+                }
+                return $app->system->last_exec_retcode() == 0;
+        }
+        return false;
+    }
+
+    /**
+     * Obtains archive compressed size from specific repository.
+     * @param string $backup_mode Server backup mode.
+     * @param string $backup_repos_path Absolute path to repository.
+     * @param string $backup_archive Name of the archive to obtain size from.
+     * @param string $password Provide repository password or empty string if there is none.
+     * @author Jorge Muñoz <elgeorge2k@gmail.com>
+     */
+    protected static function getReposArchiveSize($backup_mode, $backup_repos_path, $backup_archive, $password)
+    {
+        $info = self::getReposArchiveInfo($backup_mode, $backup_repos_path, $backup_archive, $password);
+        if ($info) {
+            return $info['compressed_size'];
+        }
+        return false;
+    }
+    /**
+     * Obtains archive information for specific repository archive.
+     * @param string $backup_mode Server backup mode.
+     * @param string $backup_repos_path Absolute path to repository.
+     * @param string $backup_archive Name of the archive to obtain size from.
+     * @param string $password Provide repository password or empty string if there is none.
+     * @return array Can contain one or more of the following keys:
+     *      'created_at': int unixtime
+     *      'created_by': string
+     *      'comment': string
+     *      'original_size': int
+     *      'compressed_size': int
+     *      'deduplicated_size': int
+     *      'num_files': int
+     *      'compression': string
+     * @author Jorge Muñoz <elgeorge2k@gmail.com>
+     */
+    protected static function getReposArchiveInfo($backup_mode, $backup_repos_path, $backup_archive, $password)
+    {
+        global $app;
+        $info = [];
+        switch ($backup_mode) {
+            case 'borg':
+                $command = self::getBorgCommand('borg info', $password);
+                $full_archive_path = $backup_repos_path . '::' . $backup_archive;
+                $app->system->exec_safe($command . ' --json ?', $full_archive_path);
+                if ($app->system->last_exec_retcode() != 0) {
+                    $app->log('Command `borg info` failed for ' . $full_archive_path . '.', LOGLEVEL_ERROR);
+                }
+                $out = implode("", $app->system->last_exec_out());
+                if ($out) {
+                    $out = json_decode($out, true);
+                }
+                if (empty($out)) {
+                    $app->log('No json result could be parsed from `borg info --json` command for repository ' . $full_archive_path . '.', LOGLEVEL_ERROR);
+                    return false;
+                }
+                if (empty($out['archives'])) {
+                    $app->log('No archive ' . $backup_archive . ' found for repository ' . $backup_repos_path . '.', LOGLEVEL_WARN);
+                    return false;
+                }
+                $info['created_at'] = strtotime($out['archives'][0]['start']);
+                $info['created_by'] = $out['archives'][0]['username'];
+                $info['comment'] = $out['archives'][0]['comment'];
+                $info['original_size'] = (int)$out['archives'][0]['stats']['original_size'];
+                $info['compressed_size'] = (int)$out['archives'][0]['stats']['compressed_size'];
+                $info['deduplicated_size'] = (int)$out['archives'][0]['stats']['deduplicated_size'];
+                $info['num_files'] = (int)$out['archives'][0]['stats']['nfiles'];
+                $prev_arg = null;
+                foreach ($out['archives'][0]['command_line'] as $arg) {
+                    if ($prev_arg == '-C' || $prev_arg == '--compression') {
+                        $info['compression'] = $arg;
+                        break;
+                    }
+                    $prev = $arg;
+                }
+        }
+        return $info;
     }
 
     /**
@@ -1498,7 +2265,7 @@ class backup
             }
         }
 
-	$sql = "SELECT DISTINCT d.*, db.server_id as `server_id` FROM web_database as db INNER JOIN web_domain as d ON (d.domain_id = db.parent_domain_id) WHERE db.server_id = ? AND db.active = 'y' AND d.backup_interval != 'none' AND d.backup_interval != ''";
+        $sql = "SELECT DISTINCT d.*, db.server_id as `server_id` FROM web_database as db INNER JOIN web_domain as d ON (d.domain_id = db.parent_domain_id) WHERE db.server_id = ? AND db.active = 'y' AND d.backup_interval != 'none' AND d.backup_interval != ''";
         $databases = $app->dbmaster->queryAllRecords($sql, $server_id);
 
         foreach ($databases as $database) {
