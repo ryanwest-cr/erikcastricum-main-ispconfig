@@ -220,7 +220,9 @@ if($do_backup == 'yes') {
     swriteln('Creating backup of "/root/.acme.sh" directory...');
   	exec("tar pcfz $backup_path/acme.sh.tar.gz /root/.acme.sh 2> /dev/null", $out, $returnvar);
   	if($returnvar != 0) die("Backup failed. We stop here...\n");
-  } elseif (is_dir('/etc/letsencrypt')) {
+  }
+
+  if (is_dir('/etc/letsencrypt')) {
     swriteln('Creating backup of "/etc/letsencrypt" directory...');
   	exec("tar pcfz $backup_path/letsencrypt.tar.gz /etc/letsencrypt 2> /dev/null", $out, $returnvar);
   	if($returnvar != 0) die("Backup failed. We stop here...\n");
