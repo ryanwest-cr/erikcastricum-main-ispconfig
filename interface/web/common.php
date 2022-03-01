@@ -39,7 +39,7 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 function include_menu_dir_files($menu_dir)
 {
-	global $app;
+	global $app, $module;
 
 	if (is_dir($menu_dir)) {
 		if ($dh = opendir($menu_dir)) {
