@@ -79,6 +79,32 @@ class system {
 		return false;
 	}
 
+	function rmdir($path, $recursive=false) {
+		// Disallow operating on root directory
+		if(realpath($path) == '/') {
+			$app->log("rmdir: afraid I might delete root: $path", LOGLEVEL_WARN);
+			return false;
+		}
+
+		$path = rtrim($path, '/');
+		if (is_dir($path) && !is_link($path)) {
+			$objects = array_diff(scandir($path), array('.', '..'));
+			foreach ($objects as $object) {
+				if ($recursive) {
+					if (is_dir("$path/$object") && !is_link("$path/$object")) {
+						$this->rmdir("$path/$object", $recursive);
+					} else {
+						unlink ("$path/$object");
+					}
+				} else {
+					$app->log("rmdir: invoked non-recursive, not removing $path (expect rmdir failure)", LOGLEVEL_DEBUG);
+				}
+			}
+			return rmdir($path);
+		}
+		return false;
+	}
+
 	public function last_exec_out() {
 		return $this->_last_exec_out;
 	}

@@ -472,15 +472,16 @@ class functions {
 		global $app;
 
 		// generate the SSH key pair for the client
-		$app->system->exec_safe('mktemp -dt id_rsa.XXXXXXXX');
-		$tmpdir = $app->system->last_exec_out();
+		if (! $tmpdir = $app->system->exec_safe('mktemp -dt id_rsa.XXXXXXXX')) {
+			$app->log("mktemp failed, cannot create SSH keypair for ".$username, LOGLEVEL_WARN);
+		}
 		$id_rsa_file = $tmpdir . uniqid('',true);
 		$id_rsa_pub_file = $id_rsa_file.'.pub';
 		if(file_exists($id_rsa_file)) unset($id_rsa_file);
 		if(file_exists($id_rsa_pub_file)) unset($id_rsa_pub_file);
 		if(!file_exists($id_rsa_file) && !file_exists($id_rsa_pub_file)) {
 			$app->system->exec_safe('ssh-keygen -t rsa -C ? -f ? -N ""', $username.'-rsa-key-'.time(), $id_rsa_file);
-			$app->db->query("UPDATE client SET created_at = UNIX_TIMESTAMP(), id_rsa = ?, ssh_rsa = ? WHERE client_id = ?", $app->system->file_get_contents($id_rsa_file), $app->system->file_get_contents($id_rsa_pub_file), $client_id);
+			$app->db->query("UPDATE client SET created_at = UNIX_TIMESTAMP(), id_rsa = ?, ssh_rsa = ? WHERE client_id = ?", @file_get_contents($id_rsa_file), @file_get_contents($id_rsa_pub_file), $client_id);
 			$app->system->rmdir($tmpdir, true);
 		} else {
 			$app->log("Failed to create SSH keypair for ".$username, LOGLEVEL_WARN);
