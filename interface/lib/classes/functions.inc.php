@@ -28,7 +28,7 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-require_once 'compatibility.inc.php';
+require_once __DIR__.'/../compatibility.inc.php';
 
 //* The purpose of this library is to provide some general functions.
 //* This class is loaded automatically by the ispconfig framework.
