@@ -664,6 +664,11 @@ $md5_filename = '/usr/local/ispconfig/security/data/file_checksums_'.date('Y-m-d
 exec('find /usr/local/ispconfig -type f -print0 | xargs -0 md5sum > '.$md5_filename . ' 2>/dev/null');
 chmod($md5_filename,0700);
 
+// TODO: In a future update, stop the update script when running courier
+if ($conf['courier']['installed'] == true) {
+	swriteln('WARNING: You are running Courier. We are removing support for Courier from ISPConfig. Migrate your system to Dovecot as soon as possible. See https://www.howtoforge.com/community/threads/migrate-from-courier-to-dovecot-on-your-ispconfig-managed-mailserver.88523/ for more information.');
+}
+
 echo "Update finished.\n";
 
 ?>
