@@ -141,6 +141,10 @@ class dashlet_limits
         if (is_file($lng_file)) {
             include $lng_file;
         }
+        $lng_file = ISPC_ROOT_PATH . '/lib/lang/'.$_SESSION['s']['language'].'.lng';
+        if (is_file($lng_file)) {
+            include $lng_file;
+        }
         $tpl->setVar($wb);
 
         if ($app->auth->is_admin()) {
