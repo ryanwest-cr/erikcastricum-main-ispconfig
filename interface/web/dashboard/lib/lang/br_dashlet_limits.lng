@@ -30,3 +30,4 @@ $wb['limit_domain_txt'] = 'Número de domínios';
 $wb['limit_mailquota_txt'] = 'Cotas atribuídas para contas de email';
 $wb['limit_web_quota_txt'] = 'Cotas atribuídas para sites';
 $wb['limit_database_quota_txt'] = 'Cotas atribuídas para Banco de Dados';
+$wb['limit_mail_wblist_txt'] = 'Number of email white / blacklist entries';

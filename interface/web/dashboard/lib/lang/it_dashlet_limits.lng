@@ -30,4 +30,5 @@ $wb['limit_domain_txt'] = 'Numero domini';
 $wb['limit_mailquota_txt'] = 'Quota mailbox assegnata';
 $wb['limit_web_quota_txt'] = 'Quota web assegnata';
 $wb['limit_database_quota_txt'] = 'Quota database assegnata';
+$wb['limit_mail_wblist_txt'] = 'Number of email white / blacklist entries';
 ?>
