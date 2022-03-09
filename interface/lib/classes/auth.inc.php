@@ -231,7 +231,7 @@ class auth {
 	public function get_random_password($minLength = 8, $special = false) {
 		if($minLength < 8) $minLength = 8;
 		$maxLength = $minLength + 5;
-		$length = mt_rand($minLength, $maxLength);
+		$length = random_int($minLength, $maxLength);
 		
 		$alphachars = "abcdefghijklmnopqrstuvwxyz";
 		$upperchars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -240,28 +240,28 @@ class auth {
 		
 		$num_special = 0;
 		if($special == true) {
-			$num_special = intval(mt_rand(0, round($length / 4))) + 1;
+			$num_special = intval(random_int(0, round($length / 4))) + 1;
 		}
-		$numericlen = mt_rand(1, 2);
+		$numericlen = random_int(1, 2);
 		$alphalen = $length - $num_special - $numericlen;
 		$upperlen = intval($alphalen / 2);
 		$alphalen = $alphalen - $upperlen;
 		$password = '';
 		
 		for($i = 0; $i < $alphalen; $i++) {
-			$password .= substr($alphachars, mt_rand(0, strlen($alphachars) - 1), 1);
+			$password .= substr($alphachars, random_int(0, strlen($alphachars) - 1), 1);
 		}
 		
 		for($i = 0; $i < $upperlen; $i++) {
-			$password .= substr($upperchars, mt_rand(0, strlen($upperchars) - 1), 1);
+			$password .= substr($upperchars, random_int(0, strlen($upperchars) - 1), 1);
 		}
 		
 		for($i = 0; $i < $num_special; $i++) {
-			$password .= substr($specialchars, mt_rand(0, strlen($specialchars) - 1), 1);
+			$password .= substr($specialchars, random_int(0, strlen($specialchars) - 1), 1);
 		}
 		
 		for($i = 0; $i < $numericlen; $i++) {
-			$password .= substr($numchars, mt_rand(0, strlen($numchars) - 1), 1);
+			$password .= substr($numchars, random_int(0, strlen($numchars) - 1), 1);
 		}
 		
 		return str_shuffle($password);
@@ -298,8 +298,8 @@ class auth {
 	public function csrf_token_get($form_name) {
 		/* CSRF PROTECTION */
 		// generate csrf protection id and key
-		$_csrf_id = uniqid($form_name . '_'); // form id
-		$_csrf_key = sha1(uniqid(microtime(true), true)); // the key
+		$_csrf_id = $form_name . '_' . bin2hex(random_bytes(12)); // form id
+		$_csrf_key = sha1(random_bytes(20)); // the key
 		if(!isset($_SESSION['_csrf'])) $_SESSION['_csrf'] = array();
 		if(!isset($_SESSION['_csrf_timeout'])) $_SESSION['_csrf_timeout'] = array();
 		$_SESSION['_csrf'][$_csrf_id] = $_csrf_key;
