@@ -176,7 +176,7 @@ class validate_client {
 			}
 			try {
 				ini_set("default_socket_timeout", 5);
-				$client = new SoapClient("http://ec.europa.eu/taxation_customs/vies/checkVatService.wsdl");
+				$client = new SoapClient("http://ec.europa.eu/taxation_customs/vies/checkVatService.wsdl", array('connection_timeout' => 5));
 				$params = array('countryCode' => $cc, 'vatNumber' => $vn);
 				try{
 					$r = $client->checkVat($params);
