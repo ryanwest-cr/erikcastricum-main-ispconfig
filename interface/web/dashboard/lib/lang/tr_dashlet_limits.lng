@@ -30,4 +30,5 @@ $wb['limit_domain_txt'] = 'Etki Alanı Sayısı';
 $wb['limit_mailquota_txt'] = 'E-posta Kutusu Alanı Kotası';
 $wb['limit_web_quota_txt'] = 'Web Sitesi Alanı Kotası';
 $wb['limit_database_quota_txt'] = 'Veritabanı Alanı Kotası';
+$wb['limit_mail_wblist_txt'] = 'Number of email white / blacklist entries';
 ?>
