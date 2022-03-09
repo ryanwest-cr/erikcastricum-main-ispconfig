@@ -138,8 +138,8 @@ class remoting {
 			}
 
 			//* Create a remote user session
-			//srand ((double)microtime()*1000000);
-			$remote_session = substr(str_shuffle('abcdefghijklmnopqrstuvwxyz'),0,1).sha1(mt_rand().uniqid('ispco',true));
+			// session id must begin with a char, not digit, to avoid mysql type confusion abuse
+			$remote_session = substr(str_shuffle('abcdefghijklmnopqrstuvwxyz'),0,1).bin2hex(random_bytes(20));
 			$remote_userid = $user['userid'];
 			$remote_functions = '';
 			$tstamp = time() + $this->session_timeout;
@@ -210,8 +210,8 @@ class remoting {
 					return false;
 				}
 				//* Create a remote user session
-				//srand ((double)microtime()*1000000);
-				$remote_session = substr(str_shuffle('abcdefghijklmnopqrstuvwxyz'),0,1).sha1(mt_rand().uniqid('ispco',true));
+				// session id must begin with a char, not digit, to avoid mysql type confusion abuse
+				$remote_session = substr(str_shuffle('abcdefghijklmnopqrstuvwxyz'),0,1).bin2hex(random_bytes(20));
 				$remote_userid = $remote_user['remote_userid'];
 				$remote_functions = $remote_user['remote_functions'];
 				$tstamp = time() + $this->session_timeout;

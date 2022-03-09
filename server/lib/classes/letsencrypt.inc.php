@@ -373,7 +373,7 @@ class letsencrypt {
 		$temp_domains = array_unique($temp_domains);
 
 		// check if domains are reachable to avoid letsencrypt verification errors
-		$le_rnd_file = uniqid('le-') . '.txt';
+		$le_rnd_file = uniqid('le-', true) . '.txt';
 		$le_rnd_hash = md5(uniqid('le-', true));
 		if(!is_dir('/usr/local/ispconfig/interface/acme/.well-known/acme-challenge/')) {
 			$app->system->mkdir('/usr/local/ispconfig/interface/acme/.well-known/acme-challenge/', false, 0755, true);
