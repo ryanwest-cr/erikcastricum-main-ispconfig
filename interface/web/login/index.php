@@ -190,7 +190,7 @@ function is_admin_ip_whitelisted($ip, $conf)
 		// exclude empty lines and comments
 		if ($line === '' || $line[0] === '#') return false;
 
-		return ip_matches_cidr($ip, $line);
+		return ipv6_matches_cidr($ip, $line) || ipv4_matches_cidr($ip, $line);
 	});
 
 	return count($matches) > 0;
@@ -198,22 +198,57 @@ function is_admin_ip_whitelisted($ip, $conf)
 
 // based on https://www.php.net/manual/en/ref.network.php (comments)
 /**
- * Checks if the given IP address matches the given CIDR.
- * @param $ip
- * @param $cidr
-
+ * Checks if the given IPv4 address matches the given CIDR.
+ * @param string $ip The IPv4 address.
+ * @param string $cidr The CIDR in the IPv4 format.
  * @return bool
  */
-function ip_matches_cidr ($ip, $cidr) {
+function ipv4_matches_cidr ($ip, $cidr)
+{
+	if (strpos($ip, '.') === false) return false;
+
 	list ($net, $mask) = explode ('/', $cidr);
 	if (!$mask) $mask = 32;
 
 	$ip_net = ip2long ($net);
+	$ip_ip = ip2long ($ip);
 	$ip_mask = ~((1 << (32 - $mask)) - 1);
 
-	$ip_ip = ip2long ($ip);
-
 	return (($ip_ip & $ip_mask) == ($ip_net & $ip_mask));
+}
+
+// based on https://stackoverflow.com/a/7951507/2428861
+/**
+ * Checks if the given IPv6 address matches the given CIDR.
+ * @param string $ip The IPv6 address.
+ * @param string $cidr The CIDR in the IPv6 format.
+ * @return bool
+ */
+function ipv6_matches_cidr($ip, $cidr)
+{
+	if (strpos($ip, ':') === false) return false;
+
+	list ($net, $mask) = explode('/', $cidr);
+	if (!$mask) $mask = 128;
+
+	$ip_net = in_addr_to_bitstring(inet_pton($net));
+	$ip_ip = in_addr_to_bitstring(inet_pton($ip));
+
+	return substr($ip_ip, 0, $mask) === substr($ip_net, 0, $mask);
+}
+
+/**
+ * Converts the output of {@see inet_pton()} to string of bits.
+ * @param string $in_addr The in_addr representation of the IP address.
+ * @return string String of bits representing given in_addr representation of the IP address.
+ */
+function in_addr_to_bitstring($in_addr)
+{
+	$result = '';
+	foreach (str_split($in_addr) as $c) {
+		$result .= str_pad(decbin(ord($c)), 8, '0', STR_PAD_LEFT);
+	}
+	return $result;
 }
 
 /**
