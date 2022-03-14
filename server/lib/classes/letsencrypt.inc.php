@@ -415,6 +415,10 @@ class letsencrypt {
 		if($use_acme) {
 			$letsencrypt_cmd = $this->get_acme_command($temp_domains, $key_file, $bundle_file, $crt_file, $server_type);
 			$allow_return_codes = array(2);
+			// Cleanup ssl cert symlinks, if exists
+			if(@is_link($key_file)) unlink($key_file);
+			if(@is_link($bundle_file)) unlink($bundle_file);
+			if(@is_link($crt_file)) unlink($crt_file);
 		} else {
 			$letsencrypt_cmd = $this->get_certbot_command($temp_domains);
 			umask($old_umask);
