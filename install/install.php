@@ -500,6 +500,12 @@ if($force) {
 	swriteln('Configuring OpenVZ');
 }
 
+// Configure AppArmor
+if($conf['apparmor']['installed']){
+  swriteln('Configuring AppArmor');
+  $inst->configure_apparmor();
+}
+
 if($install_mode == 'standard' || strtolower($inst->simple_query('Configure Firewall Server', array('y', 'n'), 'y','configure_firewall')) == 'y') {
 	//* Check for Firewall
 	if(!$conf['ufw']['installed'] && !$conf['firewall']['installed']) {

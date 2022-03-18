@@ -226,6 +226,7 @@ class installer_base {
 		if(is_installed('named') || is_installed('bind') || is_installed('bind9')) $conf['bind']['installed'] = true;
 		if(is_installed('squid')) $conf['squid']['installed'] = true;
 		if(is_installed('nginx')) $conf['nginx']['installed'] = true;
+		if(is_installed('apparmor_status')) $conf['apparmor']['installed'] = true;
 		if(is_installed('iptables') && is_installed('ufw')) {
 			$conf['ufw']['installed'] = true;
 		} elseif(is_installed('iptables')) {
@@ -2476,6 +2477,13 @@ class installer_base {
 		wf($conf["squid"]["config_dir"].'/'.$configfile, $content);
 		exec('chmod 600 '.$conf["squid"]["config_dir"].'/'.$configfile);
 		exec('chown root:root '.$conf["squid"]["config_dir"].'/'.$configfile);
+	}
+
+	public function configure_apparmor() {
+		$configfile = 'apparmor_usr.sbin.named';
+		if(is_file('/etc/apparmor.d/local/usr.sbin.named')) copy('/etc/apparmor.d/local/usr.sbin.named', '/etc/apparmor.d/local/usr.sbin.named~');
+		$content = rf("tpl/".$configfile.".master");
+		wf('/etc/apparmor.d/local/usr.sbin.named', $content);
 	}
 
 	public function configure_ufw_firewall()

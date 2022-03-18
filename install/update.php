@@ -512,6 +512,12 @@ if($reconfigure_services_answer == 'yes' || $reconfigure_services_answer == 'sel
 	$inst->configure_xmpp('dont-create-certs');
 	}
 
+  // Configure AppArmor
+  if($conf['apparmor']['installed']){
+    swriteln('Configuring AppArmor');
+    $inst->configure_apparmor();
+  }
+
 	if($conf['services']['firewall'] && $inst->reconfigure_app('Firewall', $reconfigure_services_answer)) {
 		if($conf['ufw']['installed'] == true) {
 			//* Configure Ubuntu Firewall

@@ -238,4 +238,7 @@ $conf['cron']['wget'] = '/usr/bin/wget';
 //* OpenVZ
 $conf['openvz']['installed'] = false;
 
+// AppArmor
+$conf['apparmor']['installed'] = false;
+
 ?>
