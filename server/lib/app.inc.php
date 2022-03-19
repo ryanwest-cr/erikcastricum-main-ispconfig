@@ -251,7 +251,9 @@ class app {
 				$priority_txt = 'DEBUG';
 				$bt = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 1);	// we don't need _all_ data, so we save some processing time here (gwyneth 20220315)
 				$caller = array_shift($bt);
-				$file_line_caller = '[' . strtr(basename($caller['file'], '.php'), '_', ' ') . ':' . $caller['line'] . '] ';
+				if(!empty($caller['file']) && !empty($caller['line'])) {
+					$file_line_caller = '[' . strtr(basename($caller['file'], '.php'), '_', ' ') . ':' . $caller['line'] . '] ';
+				}
 				break;
 		case 1:
 				$priority_txt = 'WARNING';
