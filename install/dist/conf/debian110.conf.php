@@ -236,4 +236,7 @@ $conf['xmpp']['installed'] = false;
 $conf['xmpp']['init_script'] = 'metronome';
 
 
+// AppArmor
+$conf['apparmor']['installed'] = false;
+
 ?>

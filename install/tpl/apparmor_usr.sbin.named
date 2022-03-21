@@ -1,0 +1,2 @@
+/etc/bind/slave/** lrw,
+/etc/bind/slave/ rw,
