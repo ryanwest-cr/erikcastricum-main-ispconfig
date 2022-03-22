@@ -10,4 +10,4 @@ $function_list['client_get_id,login,logout,mail_alias_get,mail_fetchmail_add,mai
 
 # functions used by ispc_acmeproxy:  https://git.ispconfig.org/ispconfig/Modules/-/tree/master/ispc_acmeproxy
 #
-$function_list['client_get_by_username,client_get_id,dns_zone_get,dns_zone_get_by_user,dns_zone_update,dns_txt_add,dns_txt_get,dns_txt_delete'] = 'ISPC acme proxy functions';
+$function_list['client_get_by_username,client_get_id,dns_zone_get,dns_zone_get_by_user,dns_zone_update,dns_txt_add,dns_txt_get,dns_txt_delete'] = 'ISPConfig module: acme proxy functions';
