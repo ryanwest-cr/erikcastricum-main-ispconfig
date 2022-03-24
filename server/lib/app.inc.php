@@ -266,7 +266,7 @@ class app {
 		}
 
 		/** @var string Formatted message to be sent to the logging subsystems. */
-		$log_msg = @date('d.m.Y-H:i') . ' - ' . $priority_txt .' ' . $file_line_caller . '- '. $msg;
+		$log_msg = @date('d.m.Y-H:i') . ' - ' . $priority_txt . ' ' . $file_line_caller . '- '. $msg;
 
 		// Check if the user-set priority defines that this message should be output at all.
 		if($priority >= $conf['log_priority']) {
@@ -278,7 +278,7 @@ class app {
 				die('Unable to open logfile.');
 			}
 
-			if(!fwrite($fp, $log_msg . '\r\n')) {
+			if(!fwrite($fp, $log_msg . "\r\n")) {
 				die('Unable to write to logfile.');
 			}
 
