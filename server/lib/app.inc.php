@@ -278,7 +278,7 @@ class app {
 				die('Unable to open logfile.');
 			}
 
-			if(!fwrite($fp, $log_msg . '\r\n')) {
+			if(!fwrite($fp, $log_msg . "\r\n")) {
 				die('Unable to write to logfile.');
 			}
 
