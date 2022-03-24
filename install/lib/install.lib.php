@@ -29,6 +29,7 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 error_reporting(E_ALL|E_STRICT);
 
+require_once 'compatibility.inc.php';
 
 $FILE = realpath('../install.php');
 
