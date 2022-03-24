@@ -27,7 +27,9 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-require_once 'compatibility.inc.php';
+if(version_compare(phpversion(), '7.0', '<')) {
+	require_once 'compatibility.inc.php';
+}
 
 // Set timezone
 if(isset($conf['timezone']) && $conf['timezone'] != '') {	// note: !empty($conf['timezone']) should give the same result and is more idiomatic for current versions of PHP (gwyneth 20220315)
