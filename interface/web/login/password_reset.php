@@ -71,7 +71,7 @@ if(isset($_POST['username']) && is_string($_POST['username']) && $_POST['usernam
 	} elseif ($continue) {
 		if($client['client_id'] > 0) {
 			$username = $client['username'];
-			$password_hash = sha1(uniqid('ispc_pw'));
+			$password_hash = sha1(random_bytes(20));
 			$app->db->query("UPDATE sys_user SET lost_password_reqtime = NOW(), lost_password_hash = ? WHERE username = ?", $password_hash, $username);
 
 			$server_domain = (isset($_SERVER['SERVER_NAME']) ? $_SERVER['SERVER_NAME'] : $_SERVER['HTTP_HOST']);

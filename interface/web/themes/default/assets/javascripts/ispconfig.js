@@ -739,7 +739,7 @@ $(document).on("click", "[data-uncheck-fields] > input[type='checkbox']", functi
 	}
 });
 
-$(document).on('ready', function () {
+$(document).ready(function() {
 	$.fn.extend({
 		insertAtCaret: function(myValue){
 			return this.each(function(i) {

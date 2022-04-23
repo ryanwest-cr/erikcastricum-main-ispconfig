@@ -52,7 +52,7 @@ class installer_base {
 	}
 
 	public function update_acme() {
-		$acme = explode("\n", shell_exec('which /usr/local/ispconfig/server/scripts/acme.sh /root/.acme.sh/acme.sh'));
+		$acme = explode("\n", shell_exec('which acme.sh /usr/local/ispconfig/server/scripts/acme.sh /root/.acme.sh/acme.sh'));
 		$acme = reset($acme);
 		$val = 0;
 
@@ -190,6 +190,7 @@ class installer_base {
 			$salt_length = 12;
 		}
 
+		// todo: replace the below with password_hash() when we drop php5.4 support
 		if(function_exists('openssl_random_pseudo_bytes')) {
 			$salt .= substr(bin2hex(openssl_random_pseudo_bytes($salt_length)), 0, $salt_length);
 		} else {
@@ -225,6 +226,7 @@ class installer_base {
 		if(is_installed('named') || is_installed('bind') || is_installed('bind9')) $conf['bind']['installed'] = true;
 		if(is_installed('squid')) $conf['squid']['installed'] = true;
 		if(is_installed('nginx')) $conf['nginx']['installed'] = true;
+		if(is_installed('apparmor_status')) $conf['apparmor']['installed'] = true;
 		if(is_installed('iptables') && is_installed('ufw')) {
 			$conf['ufw']['installed'] = true;
 		} elseif(is_installed('iptables')) {
@@ -247,6 +249,7 @@ class installer_base {
 		$msg = '';
 
 		if(version_compare(phpversion(), '5.4', '<')) $msg .= "PHP Version 5.4 or newer is required. The currently used PHP version is ".phpversion().".\n";
+		if(version_compare(phpversion(), '8.0', '>=')) $msg .= "PHP Version 8 is not supported yet. Change PHP version back to the default version of the OS. The currently used PHP version is ".phpversion().".\n";
 		if(!function_exists('curl_init')) $msg .= "PHP Curl Module is missing.\n";
 		if(!function_exists('mysqli_connect')) $msg .= "PHP MySQLi Module is nmissing.\n";
 		if(!function_exists('mb_detect_encoding')) $msg .= "PHP Multibyte Module (MB) is missing.\n";
@@ -788,7 +791,7 @@ class installer_base {
 					$this->warning('Unable to set rights of user in master database: '.$value['db']."\n Query: ".$query."\n Error: ".$this->dbmaster->errorMessage);
 				}
 
-				$query = "GRANT SELECT, UPDATE(`dnssec_initialized`, `dnssec_info`, `dnssec_last_signed`) ON ?? TO ?@?";
+				$query = "GRANT SELECT, UPDATE(`dnssec_initialized`, `dnssec_info`, `dnssec_last_signed`, `rendered_zone`) ON ?? TO ?@?";
 				if ($verbose){
 					echo $query ."\n";
 				}
@@ -1107,7 +1110,7 @@ class installer_base {
 		$server_ini_array = ini_to_array(stripslashes($server_ini_rec['config']));
 		unset($server_ini_rec);
 
-		//* If there are RBL's defined, format the list and add them to smtp_recipient_restrictions to prevent removeal after an update
+		//* If there are RBL's defined, format the list and add them to smtp_recipient_restrictions to prevent removal after an update
 		$rbl_list = '';
 		if (@isset($server_ini_array['mail']['realtime_blackhole_list']) && $server_ini_array['mail']['realtime_blackhole_list'] != '') {
 			$rbl_hosts = explode(",", str_replace(" ", "", $server_ini_array['mail']['realtime_blackhole_list']));
@@ -1647,6 +1650,12 @@ class installer_base {
 	public function configure_amavis() {
 		global $conf;
 
+		//* These postconf commands will be executed on installation and update
+		$server_ini_rec = $this->db->queryOneRecord("SELECT mail_server, config FROM ?? WHERE server_id = ?", $conf["mysql"]["database"] . '.server', $conf['server_id']);
+		$server_ini_array = ini_to_array(stripslashes($server_ini_rec['config']));
+		$mail_server = ($server_ini_rec['mail_server']) ? true : false;
+		unset($server_ini_rec);
+
 		// amavisd user config file
 		$configfile = 'amavisd_user_config';
 		if(is_file($conf['amavis']['config_dir'].'/conf.d/50-user')) copy($conf['amavis']['config_dir'].'/conf.d/50-user', $conf['amavis']['config_dir'].'/50-user~');
@@ -1659,64 +1668,84 @@ class installer_base {
 		$content = str_replace('{mysql_server_ip}', $conf['mysql']['ip'], $content);
 		wf($conf['amavis']['config_dir'].'/conf.d/50-user', $content);
 		chmod($conf['amavis']['config_dir'].'/conf.d/50-user', 0640);
-
-		// TODO: chmod and chown on the config file
-
-		// test if lmtp if available
-		$configure_lmtp = $this->get_postfix_service('lmtp','unix');
-
-		// Adding the amavisd commands to the postfix configuration
-		// Add array for no error in foreach and maybe future options
-		$postconf_commands = array ();
-
-		// Check for amavisd -> pure webserver with postfix for mailing without antispam
-		if ($conf['amavis']['installed']) {
-			$content_filter_service = ($configure_lmtp) ? 'lmtp' : 'amavis';
-			$postconf_commands[] = "content_filter = ${content_filter_service}:[127.0.0.1]:10024";
-			$postconf_commands[] = 'receive_override_options = no_address_mappings';
-		}
-
-		// Make a backup copy of the main.cf file
-		copy($conf['postfix']['config_dir'].'/main.cf', $conf['postfix']['config_dir'].'/main.cf~2');
-
-		// Executing the postconf commands
-		foreach($postconf_commands as $cmd) {
-			$command = "postconf -e '$cmd'";
-			caselog($command." &> /dev/null", __FILE__, __LINE__, "EXECUTED: $command", "Failed to execute the command $command");
-		}
+		chgrp($conf['amavis']['config_dir'].'/conf.d/50-user', 'amavis');
 
 		$config_dir = $conf['postfix']['config_dir'];
+		$quoted_config_dir = preg_quote($config_dir, '|');
 
-		// Adding amavis-services to the master.cf file if the service does not already exists
-//		$add_amavis = !$this->get_postfix_service('amavis','unix');
-//		$add_amavis_10025 = !$this->get_postfix_service('127.0.0.1:10025','inet');
-//		$add_amavis_10027 = !$this->get_postfix_service('127.0.0.1:10027','inet');
-		//*TODO: check templates against existing postfix-services to make sure we use the template
+		$mail_config = $server_ini_array['mail'];
+		//* only change postfix config if amavisd is active filter
+		if($mail_server && $mail_config['content_filter'] === 'amavisd') {
+			// test if lmtp if available
+			$configure_lmtp = $this->get_postfix_service('lmtp','unix');
 
-		// Or just remove the old service definitions and add them again?
-		$add_amavis = $this->remove_postfix_service('amavis','unix');
-		$add_amavis_10025 = $this->remove_postfix_service('127.0.0.1:10025','inet');
-		$add_amavis_10027 = $this->remove_postfix_service('127.0.0.1:10027','inet');
+			// Adding the amavisd commands to the postfix configuration
+			$postconf_commands = array ();
 
-		if ($add_amavis || $add_amavis_10025 || $add_amavis_10027) {
-			//* backup master.cf
+			// Check for amavisd -> pure webserver with postfix for mailing without antispam
+			if ($conf['amavis']['installed']) {
+				$content_filter_service = ($configure_lmtp) ? 'lmtp' : 'amavis';
+				$postconf_commands[] = "content_filter = ${content_filter_service}:[127.0.0.1]:10024";
+				$postconf_commands[] = 'receive_override_options = no_address_mappings';
+				$postconf_commands[] = 'address_verify_virtual_transport = smtp:[127.0.0.1]:10025';
+				$postconf_commands[] = 'address_verify_transport_maps = static:smtp:[127.0.0.1]:10025';
+			}
+
+			$options = preg_split("/,\s*/", exec("postconf -h smtpd_recipient_restrictions"));
+			$new_options = array();
+			foreach ($options as $value) {
+				$value = trim($value);
+				if ($value == '') continue;
+				if (preg_match("|check_recipient_access\s+proxy:mysql:${quoted_config_dir}/mysql-verify_recipients.cf|", $value)) {
+					continue;
+				}
+				$new_options[] = $value;
+			}
+			if ($configure_lmtp) {
+				for ($i = 0; isset($new_options[$i]); $i++) {
+					if ($new_options[$i] == 'reject_unlisted_recipient') {
+						array_splice($new_options, $i+1, 0, array("check_recipient_access proxy:mysql:${config_dir}/mysql-verify_recipients.cf"));
+						break;
+					}
+				}
+				# postfix < 3.3 needs this when using reject_unverified_recipient:
+				if(version_compare($postfix_version, 3.3, '<')) {
+					$postconf_commands[] = "enable_original_recipient = yes";
+				}
+			}
+			$postconf_commands[] = "smtpd_recipient_restrictions = ".implode(", ", $new_options);
+
+			// Make a backup copy of the main.cf file
+			copy($conf['postfix']['config_dir'].'/main.cf', $conf['postfix']['config_dir'].'/main.cf~2');
+
+			// Executing the postconf commands
+			foreach($postconf_commands as $cmd) {
+				$command = "postconf -e '$cmd'";
+				caselog($command." &> /dev/null", __FILE__, __LINE__, "EXECUTED: $command", "Failed to execute the command $command");
+			}
+
+			// Adding amavis-services to the master.cf file
+
+			// backup master.cf
 			if(is_file($config_dir.'/master.cf')) copy($config_dir.'/master.cf', $config_dir.'/master.cf~');
-			// adjust amavis-config
-			if($add_amavis) {
-				$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis.master', 'tpl/master_cf_amavis.master');
-				af($config_dir.'/master.cf', $content);
-				unset($content);
-			}
-			if ($add_amavis_10025) {
-				$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis10025.master', 'tpl/master_cf_amavis10025.master');
-				af($config_dir.'/master.cf', $content);
-				unset($content);
-			}
-			if ($add_amavis_10027) {
-				$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis10027.master', 'tpl/master_cf_amavis10027.master');
-				af($config_dir.'/master.cf', $content);
-				unset($content);
-    		}
+
+			// first remove the old service definitions
+			$this->remove_postfix_service('amavis','unix');
+			$this->remove_postfix_service('127.0.0.1:10025','inet');
+			$this->remove_postfix_service('127.0.0.1:10027','inet');
+
+			// then add them back
+			$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis.master', 'tpl/master_cf_amavis.master');
+			af($config_dir.'/master.cf', $content);
+			unset($content);
+
+			$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis10025.master', 'tpl/master_cf_amavis10025.master');
+			af($config_dir.'/master.cf', $content);
+			unset($content);
+
+			$content = rfsel($conf['ispconfig_install_dir'].'/server/conf-custom/install/master_cf_amavis10027.master', 'tpl/master_cf_amavis10027.master');
+			af($config_dir.'/master.cf', $content);
+			unset($content);
 		}
 
 		// Add the clamav user to the amavis group
@@ -1746,14 +1775,21 @@ class installer_base {
 		global $conf;
 
 		//* These postconf commands will be executed on installation and update
-		$server_ini_rec = $this->db->queryOneRecord("SELECT config FROM ?? WHERE server_id = ?", $conf["mysql"]["database"] . '.server', $conf['server_id']);
+		$server_ini_rec = $this->db->queryOneRecord("SELECT mail_server, config FROM ?? WHERE server_id = ?", $conf["mysql"]["database"] . '.server', $conf['server_id']);
 		$server_ini_array = ini_to_array(stripslashes($server_ini_rec['config']));
+		$mail_server = ($server_ini_rec['mail_server']) ? true : false;
 		unset($server_ini_rec);
 
+		$config_dir = $conf['postfix']['config_dir'];
+		$quoted_config_dir = preg_quote($config_dir, '|');
+
 		$mail_config = $server_ini_array['mail'];
-		if($mail_config['content_filter'] === 'rspamd') {
-			exec("postconf -X 'receive_override_options'");
-			exec("postconf -X 'content_filter'");
+		//* only change postfix config if rspamd is active filter
+		if($mail_server && $mail_config['content_filter'] === 'rspamd') {
+			exec("postconf -X receive_override_options");
+			exec("postconf -X content_filter");
+			exec("postconf -X address_verify_virtual_transport");
+			exec("postconf -X address_verify_transport_maps");
 
 			exec("postconf -e 'smtpd_milters = inet:localhost:11332'");
 			exec("postconf -e 'non_smtpd_milters = inet:localhost:11332'");
@@ -1802,6 +1838,9 @@ class installer_base {
 				$value = trim($value);
 				if ($value == '') continue;
 				if (preg_match('/check_policy_service\s+inet:127.0.0.1:10023/', $value)) {
+					continue;
+				}
+				if (preg_match("|check_recipient_access\s+proxy:mysql:${quoted_config_dir}/mysql-verify_recipients.cf|", $value)) {
 					continue;
 				}
 				$new_options[] = $value;
@@ -1861,7 +1900,7 @@ class installer_base {
 		# local.d templates with template tags
 		# note: ensure these template files are in server/conf/ and symlinked in install/tpl/
 		$local_d = array(
-			'dkim_signing.conf',
+			'dkim_signing.conf',	# dkim_signing.conf no longer uses template tags, could move below
 			'options.inc',
 			'redis.conf',
 			'classifier-bayes.conf',
@@ -1897,6 +1936,7 @@ class installer_base {
 			'neural_group.conf',
 			'users.conf',
 			'groups.conf',
+			'arc.conf',
 		);
 		foreach ($local_d as $f) {
 			if(file_exists($conf['ispconfig_install_dir']."/server/conf-custom/install/rspamd_${f}.master")) {
@@ -2440,6 +2480,13 @@ class installer_base {
 		exec('chown root:root '.$conf["squid"]["config_dir"].'/'.$configfile);
 	}
 
+	public function configure_apparmor() {
+		$configfile = 'apparmor_usr.sbin.named';
+		if(is_file('/etc/apparmor.d/local/usr.sbin.named')) copy('/etc/apparmor.d/local/usr.sbin.named', '/etc/apparmor.d/local/usr.sbin.named~');
+		$content = rf("tpl/".$configfile.".master");
+		wf('/etc/apparmor.d/local/usr.sbin.named', $content);
+	}
+
 	public function configure_ufw_firewall()
 	{
 		if($this->is_update == false) {
@@ -2722,11 +2769,17 @@ class installer_base {
 			$content = str_replace('{use_socket}', $use_socket, $content);
 
 			// Fix socket path on PHP 7 systems
-			if(file_exists('/var/run/php/php7.0-fpm.sock'))	$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.0-fpm.sock', $content);
-			if(file_exists('/var/run/php/php7.1-fpm.sock'))	$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.1-fpm.sock', $content);
-			if(file_exists('/var/run/php/php7.2-fpm.sock'))	$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.2-fpm.sock', $content);
-			if(file_exists('/var/run/php/php7.3-fpm.sock'))	$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.3-fpm.sock', $content);
-			if(file_exists('/var/run/php/php7.4-fpm.sock'))	$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.4-fpm.sock', $content);
+			if (file_exists('/var/run/php/php7.4-fpm.sock')) {
+				$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.4-fpm.sock', $content);
+			} elseif(file_exists('/var/run/php/php7.3-fpm.sock')) {
+				$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.3-fpm.sock', $content);
+			} elseif (file_exists('/var/run/php/php7.2-fpm.sock')) {
+				$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.2-fpm.sock', $content);
+			} elseif (file_exists('/var/run/php/php7.1-fpm.sock')) {
+				$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.1-fpm.sock', $content);
+			} elseif (file_exists('/var/run/php/php7.0-fpm.sock')) {
+				$content = str_replace('/var/run/php5-fpm.sock', '/var/run/php/php7.0-fpm.sock', $content);
+			}
 
 			wf($vhost_conf_dir.'/apps.vhost', $content);
 
@@ -2823,7 +2876,7 @@ class installer_base {
 		if(@is_link($vhost_conf_enabled_dir.'/' . $use_symlink)) {
 			unlink($vhost_conf_enabled_dir.'/' . $use_symlink);
 		}
-		if(!@is_link($vhost_conf_enabled_dir.'/' . $use_symlink)) {
+		if(!@is_file($vhost_conf_enabled_dir.'/' . $use_symlink)) {
 			symlink($vhost_conf_dir.'/' . $use_name, $vhost_conf_enabled_dir.'/' . $use_symlink);
 		}
 	}
@@ -2894,8 +2947,13 @@ class installer_base {
 				$check_acme_file = $acme_cert_dir . '/cert.pem';
 			}
 		}
-
 		swriteln('Using certificate path ' . $acme_cert_dir);
+
+		if(!is_dir($conf['ispconfig_log_dir'])) {
+			mkdir($conf['ispconfig_log_dir'], 0755, true);
+		}
+		$acme_log = $conf['ispconfig_log_dir'] . '/acme.log';
+
 		$ip_address_match = false;
 		if(!(($svr_ip4 && in_array($svr_ip4, $dns_ips)) || ($svr_ip6 && in_array($svr_ip6, $dns_ips)))) {
 			swriteln('Server\'s public ip(s) (' . $svr_ip4 . ($svr_ip6 ? ', ' . $svr_ip6 : '') . ') not found in A/AAAA records for ' . $hostname . ': ' . implode(', ', $dns_ips));
@@ -2917,16 +2975,25 @@ class installer_base {
 			// This script is needed earlier to check and open http port 80 or standalone might fail
 			// Make executable and temporary symlink latest letsencrypt pre, post and renew hook script before install
 			if(file_exists(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_pre_hook.sh') && !file_exists('/usr/local/bin/letsencrypt_pre_hook.sh')) {
+				if(is_link('/usr/local/bin/letsencrypt_pre_hook.sh')) {
+					unlink('/usr/local/bin/letsencrypt_pre_hook.sh');
+				}
 				symlink(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_pre_hook.sh', '/usr/local/bin/letsencrypt_pre_hook.sh');
 				chown('/usr/local/bin/letsencrypt_pre_hook.sh', 'root');
 				chmod('/usr/local/bin/letsencrypt_pre_hook.sh', 0700);
 			}
 			if(file_exists(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_post_hook.sh') && !file_exists('/usr/local/bin/letsencrypt_post_hook.sh')) {
+				if(is_link('/usr/local/bin/letsencrypt_post_hook.sh')) {
+					unlink('/usr/local/bin/letsencrypt_post_hook.sh');
+				}
 				symlink(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_post_hook.sh', '/usr/local/bin/letsencrypt_post_hook.sh');
 				chown('/usr/local/bin/letsencrypt_post_hook.sh', 'root');
 				chmod('/usr/local/bin/letsencrypt_post_hook.sh', 0700);
 			}
 			if(file_exists(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_renew_hook.sh') && !file_exists('/usr/local/bin/letsencrypt_renew_hook.sh')) {
+				if(is_link('/usr/local/bin/letsencrypt_renew_hook.sh')) {
+					unlink('/usr/local/bin/letsencrypt_renew_hook.sh');
+				}
 				symlink(ISPC_INSTALL_ROOT . '/server/scripts/letsencrypt_renew_hook.sh', '/usr/local/bin/letsencrypt_renew_hook.sh');
 				chown('/usr/local/bin/letsencrypt_renew_hook.sh', 'root');
 				chmod('/usr/local/bin/letsencrypt_renew_hook.sh', 0700);
@@ -2950,7 +3017,7 @@ class installer_base {
 			$le_client = reset($le_client);
 
 			// Check for Neilpang acme.sh as well
-			$acme = explode("\n", shell_exec('which /usr/local/ispconfig/server/scripts/acme.sh /root/.acme.sh/acme.sh'));
+			$acme = explode("\n", shell_exec('which acme.sh /usr/local/ispconfig/server/scripts/acme.sh /root/.acme.sh/acme.sh'));
 			$acme = reset($acme);
 
 			if((!$acme || !is_executable($acme)) && (!$le_client || !is_executable($le_client))) {
@@ -2958,7 +3025,7 @@ class installer_base {
 				if(!$success) {
 					swriteln('Failed installing acme.sh. Will not be able to issue certificate during install.');
 				} else {
-					$acme = explode("\n", shell_exec('which /usr/local/ispconfig/server/scripts/acme.sh /root/.acme.sh/acme.sh'));
+					$acme = explode("\n", shell_exec('which acme.sh /usr/local/ispconfig/server/scripts/acme.sh /root/.acme.sh/acme.sh'));
 					$acme = reset($acme);
 					if($acme && is_executable($acme)) {
 						swriteln('Installed acme.sh and using it for certificate creation during install.');
@@ -3001,14 +3068,30 @@ class installer_base {
 			$issued_successfully = false;
 
 			// Backup existing ispserver ssl files
-			if(file_exists($ssl_crt_file) || is_link($ssl_crt_file)) {
-				rename($ssl_crt_file, $ssl_crt_file . '-temporary.bak');
-			}
-			if(file_exists($ssl_key_file) || is_link($ssl_key_file)) {
-				rename($ssl_key_file, $ssl_key_file . '-temporary.bak');
-			}
-			if(file_exists($ssl_pem_file) || is_link($ssl_pem_file)) {
-				rename($ssl_pem_file, $ssl_pem_file . '-temporary.bak');
+			//
+			// We may find valid or broken symlinks or actual files here.
+			//
+			// - dangling links are broken and get perm renamed (should just delete?).
+			//   possibly web server can't start because vhost file points to non-existing cert files,
+			//   we're not trying to catch or fix that (and not making it worse)
+			//
+			// - link to valid file is tmp renamed, and file copied to original name.
+			//   if cert request is successful, remove the old symlink;
+			//   if cert request fails, remove file copy and rename symlink to original name
+			//
+			// - actual file copied to tmp name.
+			//   if cert request is successful, rename tmp copy to perm rename;
+			//   if cert request fails, delete tmp copy
+			$cert_files = array( $ssl_crt_file, $ssl_key_file, $ssl_pem_file );
+			foreach ($cert_files as $f) {
+				if (is_link($f) && ! file_exists($f)) {
+					rename($f, $f.'-'.$date->format('YmdHis').'.bak');
+				} elseif (is_link($f)) {
+					rename($f, $f.'-temporary.bak');
+					copy($f.'-temporary.bak', $f);
+				} elseif(file_exists($f)) {
+					copy($f, $f.'-temporary.bak');
+				}
 			}
 
 			// Attempt to use Neilpang acme.sh first, as it is now the preferred LE client
@@ -3020,14 +3103,17 @@ class installer_base {
 				# acme.sh does not set umask, resulting in incorrect permissions (ispconfig issue #6015)
 				$old_umask = umask(0022);
 
+				// Switch from zerossl to letsencrypt CA
+				exec("$acme --set-default-ca  --server  letsencrypt");
+
 				$out = null;
 				$ret = null;
 				if($conf['nginx']['installed'] == true || $conf['apache']['installed'] == true) {
-					exec("$acme --issue -w /usr/local/ispconfig/interface/acme -d " . escapeshellarg($hostname) . " $renew_hook", $out, $ret);
+					exec("$acme --issue --log $acme_log -w /usr/local/ispconfig/interface/acme -d " . escapeshellarg($hostname) . " $renew_hook", $out, $ret);
 				}
 				// Else, it is not webserver, so we use standalone
 				else {
-					exec("$acme --issue --standalone -d " . escapeshellarg($hostname) . " $hook", $out, $ret);
+					exec("$acme --issue --log $acme_log --standalone -d " . escapeshellarg($hostname) . " $hook", $out, $ret);
 				}
 
 				if($ret == 0 || ($ret == 2 && file_exists($check_acme_file))) {
@@ -3039,31 +3125,33 @@ class installer_base {
 					//$acme_cert = "--cert-file $acme_cert_dir/cert.pem";
 					$acme_key = "--key-file " . escapeshellarg($ssl_key_file);
 					$acme_chain = "--fullchain-file " . escapeshellarg($ssl_crt_file);
-					exec("$acme --install-cert -d " . escapeshellarg($hostname) . " $acme_key $acme_chain");
+					exec("$acme --install-cert --log $acme_log -d " . escapeshellarg($hostname) . " $acme_key $acme_chain");
 					$issued_successfully = true;
 					umask($old_umask);
 
 					// Make temporary backup of self-signed certs permanent
-					if(file_exists($ssl_crt_file.'-temporary.bak') || is_link($ssl_crt_file.'-temporary.bak'))
-						rename($ssl_crt_file.'-temporary.bak', $ssl_crt_file.'-'.$date->format('YmdHis').'.bak');
-					if(file_exists($ssl_key_file.'-temporary.bak') || is_link($ssl_key_file.'-temporary.bak'))
-						rename($ssl_key_file.'-temporary.bak', $ssl_key_file.'-'.$date->format('YmdHis').'.bak');
-					if(file_exists($ssl_pem_file.'-temporary.bak') || is_link($ssl_pem_file.'-temporary.bak'))
-						rename($ssl_pem_file.'-temporary.bak', $ssl_pem_file.'-'.$date->format('YmdHis').'.bak');
+					foreach ($cert_files as $f) {
+						if (is_link($f.'-temporary.bak')) {
+							unlink($f.'-temporary.bak');
+						} elseif(file_exists($f.'-temporary.bak')) {
+							rename($f.'-temporary.bak', $f.'-'.$date->format('YmdHis').'.bak');
+						}
+					}
 
 				} else {
 					swriteln('Issuing certificate via acme.sh failed. Please check that your hostname can be verified by letsencrypt');
 
 					umask($old_umask);
 
-					// Restore temporary backup of self-signed certs
-					if(file_exists($ssl_crt_file.'-temporary.bak') || is_link($ssl_crt_file.'-temporary.bak'))
-						rename($ssl_crt_file.'-temporary.bak', $ssl_crt_file);
-					if(file_exists($ssl_key_file.'-temporary.bak') || is_link($ssl_key_file.'-temporary.bak'))
-						rename($ssl_key_file.'-temporary.bak', $ssl_key_file);
-					if(file_exists($ssl_pem_file.'-temporary.bak') || is_link($ssl_pem_file.'-temporary.bak'))
-						rename($ssl_pem_file.'-temporary.bak', $ssl_pem_file);
-
+					// Restore/cleanup temporary backup of self-signed certs
+					foreach ($cert_files as $f) {
+						if (is_link($f.'-temporary.bak')) {
+							@unlink($f);
+							rename($f.'-temporary.bak', $f);
+						} elseif(file_exists($f.'-temporary.bak')) {
+							unlink($f.'-temporary.bak');
+						}
+					}
 				}
 			// Else, we attempt to use the official LE certbot client certbot
 			} else {
@@ -3096,29 +3184,37 @@ class installer_base {
 						// certbot returns with 0 on issue for already existing certificate
 
 						$acme_cert_dir = '/etc/letsencrypt/live/' . $hostname;
+						foreach (array( $ssl_crt_file, $ssl_key_file) as $f) {
+							if (file_exists($f) && ! is_link($f)) {
+								unlink($f);
+							}
+						}
 						symlink($acme_cert_dir . '/fullchain.pem', $ssl_crt_file);
 						symlink($acme_cert_dir . '/privkey.pem', $ssl_key_file);
 
 						$issued_successfully = true;
 
 						// Make temporary backup of self-signed certs permanent
-						if(file_exists($ssl_crt_file.'-temporary.bak') || is_link($ssl_crt_file.'-temporary.bak'))
-							rename($ssl_crt_file.'-temporary.bak', $ssl_crt_file.'-'.$date->format('YmdHis').'.bak');
-						if(file_exists($ssl_key_file.'-temporary.bak') || is_link($ssl_key_file.'-temporary.bak'))
-							rename($ssl_key_file.'-temporary.bak', $ssl_key_file.'-'.$date->format('YmdHis').'.bak');
-						if(file_exists($ssl_pem_file.'-temporary.bak') || is_link($ssl_pem_file.'-temporary.bak'))
-							rename($ssl_pem_file.'-temporary.bak', $ssl_pem_file.'-'.$date->format('YmdHis').'.bak');
+						foreach ($cert_files as $f) {
+							if (is_link($f.'-temporary.bak')) {
+								unlink($f.'-temporary.bak');
+							} elseif(file_exists($f.'-temporary.bak')) {
+								rename($f.'-temporary.bak', $f.'-'.$date->format('YmdHis').'.bak');
+							}
+						}
 
 					} else {
 						swriteln('Issuing certificate via certbot failed. Please check log files and make sure that your hostname can be verified by letsencrypt');
 
-						// Restore temporary backup of self-signed certs
-						if(file_exists($ssl_crt_file.'-temporary.bak') || is_link($ssl_crt_file.'-temporary.bak'))
-							rename($ssl_crt_file.'-temporary.bak', $ssl_crt_file);
-						if(file_exists($ssl_key_file.'-temporary.bak') || is_link($ssl_key_file.'-temporary.bak'))
-							rename($ssl_key_file.'-temporary.bak', $ssl_key_file);
-						if(file_exists($ssl_pem_file.'-temporary.bak') || is_link($ssl_pem_file.'-temporary.bak'))
-							rename($ssl_pem_file.'-temporary.bak', $ssl_pem_file);
+						// Restore/cleanup temporary backup of self-signed certs
+						foreach ($cert_files as $f) {
+							if (is_link($f.'-temporary.bak')) {
+								@unlink($f);
+								rename($f.'-temporary.bak', $f);
+							} elseif(file_exists($f.'-temporary.bak')) {
+								unlink($f.'-temporary.bak');
+							}
+						}
 
 					}
 				} else {

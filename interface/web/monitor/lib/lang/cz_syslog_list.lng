@@ -4,3 +4,7 @@ $wb['tstamp_txt'] = 'Datum';
 $wb['server_id_txt'] = 'Server';
 $wb['loglevel_txt'] = 'Úroveň protokolu';
 $wb['message_txt'] = 'Zpráva';
+$wb['batch_delete_warnings_txt'] = 'Remove all warnings';
+$wb['batch_delete_errors_txt'] = 'Remove all errors';
+$wb['batch_delete_confirmation'] = 'Are you sure you want to acknowledge all log entries?'
+?>

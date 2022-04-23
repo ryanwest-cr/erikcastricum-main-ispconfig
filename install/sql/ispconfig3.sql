@@ -185,6 +185,7 @@ CREATE TABLE `client` (
   `limit_spamfilter_wblist` int(11) NOT NULL DEFAULT '0',
   `limit_spamfilter_user` int(11) NOT NULL DEFAULT '0',
   `limit_spamfilter_policy` int(11) NOT NULL DEFAULT '0',
+  `limit_mail_backup` ENUM( 'n', 'y' ) NOT NULL DEFAULT 'y',
   `limit_relayhost` ENUM( 'n', 'y' ) NOT NULL DEFAULT 'n',
   `default_xmppserver` int(11) unsigned NOT NULL DEFAULT '1',
   `xmpp_servers` text,
@@ -318,6 +319,7 @@ CREATE TABLE `client_template` (
   `limit_spamfilter_wblist` int(11) NOT NULL default '0',
   `limit_spamfilter_user` int(11) NOT NULL default '0',
   `limit_spamfilter_policy` int(11) NOT NULL default '0',
+  `limit_mail_backup` ENUM( 'n', 'y' ) NOT NULL DEFAULT 'y',
   `limit_relayhost` ENUM( 'n', 'y' ) NOT NULL DEFAULT 'n',
   `default_xmppserver` int(11) unsigned NOT NULL DEFAULT '1',
   `xmpp_servers` text,
@@ -633,6 +635,7 @@ CREATE TABLE `dns_soa` (
   `dnssec_algo` SET('NSEC3RSASHA1','ECDSAP256SHA256') NOT NULL DEFAULT 'ECDSAP256SHA256',
   `dnssec_last_signed` BIGINT NOT NULL DEFAULT '0',
   `dnssec_info` TEXT NULL,
+  `rendered_zone` MEDIUMTEXT NULL,
   PRIMARY KEY  (`id`),
   UNIQUE KEY `origin` (`origin`),
   KEY `active` (`active`)
@@ -916,7 +919,7 @@ CREATE TABLE `mail_forwarding` (
   `allow_send_as` ENUM('n','y') NOT NULL DEFAULT 'n',
   `greylisting` enum('n','y' ) NOT NULL DEFAULT 'n',
   PRIMARY KEY  (`forwarding_id`),
-  KEY `server_id` (`server_id`,`source`),
+  KEY `server_id` (`server_id`, `source`),
   KEY `type` (`type`)
 ) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
@@ -964,6 +967,27 @@ CREATE TABLE `mail_mailinglist` (
   `email` varchar(255) NOT NULL DEFAULT '',
   `password` varchar(255) NOT NULL DEFAULT '',
   PRIMARY KEY  (`mailinglist_id`)
+) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for Table `mail_relay_domain`
+--
+
+CREATE TABLE IF NOT EXISTS `mail_relay_domain` (
+  `relay_domain_id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `sys_userid` int(11) NOT NULL DEFAULT '0',
+  `sys_groupid` int(11) NOT NULL DEFAULT '0',
+  `sys_perm_user` varchar(5) DEFAULT NULL,
+  `sys_perm_group` varchar(5) DEFAULT NULL,
+  `sys_perm_other` varchar(5) DEFAULT NULL,
+  `server_id` int(11) NOT NULL DEFAULT '0',
+  `domain` varchar(255) DEFAULT NULL,
+  `access` varchar(255) NOT NULL DEFAULT 'OK',
+  `active` varchar(255) NOT NULL DEFAULT 'y',
+  PRIMARY KEY (`relay_domain_id`),
+  UNIQUE KEY `domain` (`domain`, `server_id`)
 ) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
 -- --------------------------------------------------------
@@ -1021,7 +1045,7 @@ CREATE TABLE `mail_transport` (
   `active` enum('n','y') NOT NULL DEFAULT 'n',
   PRIMARY KEY  (`transport_id`),
   KEY `server_id` (`server_id`,`transport`),
-  KEY `server_id_2` (`server_id`,`domain`)
+  UNIQUE KEY `server_id_2` (`server_id`, `domain`)
 ) DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
 -- --------------------------------------------------------
@@ -1315,6 +1339,7 @@ CREATE TABLE `remote_session` (
   `remote_functions` text,
   `client_login` tinyint(1) unsigned NOT NULL default '0',
   `tstamp` int(10) unsigned NOT NULL DEFAULT '0',
+  `remote_ip` varchar(39) NOT NULL DEFAULT '',
   PRIMARY KEY  (`remote_session`)
 ) DEFAULT CHARSET=utf8 ;
 
@@ -1545,7 +1570,7 @@ CREATE TABLE `spamfilter_users` (
   `sys_perm_other` varchar(5) NOT NULL DEFAULT '',
   `server_id` int(11) unsigned NOT NULL DEFAULT '0',
   `priority` tinyint(3) unsigned NOT NULL default '7',
-  `policy_id` int(11) unsigned NOT NULL default '1',
+  `policy_id` int(11) unsigned NOT NULL default '0',
   `email` varchar(255) NOT NULL DEFAULT '',
   `fullname` varchar(64) default NULL,
   `local` varchar(1) default NULL,

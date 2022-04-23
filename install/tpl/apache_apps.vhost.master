@@ -9,10 +9,12 @@
 <VirtualHost {tmpl_var name='apps_vhost_ip'}:{tmpl_var name='apps_vhost_port'}>
   ServerAdmin webmaster@localhost
   {tmpl_var name='apps_vhost_servername'}
-
-  <FilesMatch "\.ph(p3?|tml)$">
-    SetHandler None
-  </FilesMatch>
+  
+  <Directory {tmpl_var name='apps_vhost_dir'}>
+    <FilesMatch "\.ph(p3?|tml)$">
+      SetHandler None
+    </FilesMatch>
+  </Directory>
 
   # SSL Configuration
   <tmpl_var name="ssl_comment">SSLEngine On
@@ -96,7 +98,7 @@
     DocumentRoot {tmpl_var name='apps_vhost_dir'}
     SuexecUserGroup ispapps ispapps
     <Directory {tmpl_var name='apps_vhost_dir'}>
-		Options +Indexes +FollowSymLinks +MultiViews +ExecCGI
+		Options -Indexes +FollowSymLinks +MultiViews +ExecCGI
 		AllowOverride AuthConfig Indexes Limit Options FileInfo
 	    <FilesMatch "\.php$">
 		  SetHandler fcgid-script
@@ -109,6 +111,8 @@
 		Allow from all
 		</tmpl_if>
     </Directory>
+    IPCCommTimeout  7200
+    MaxRequestLen 15728640 
   </IfModule>
 
 {tmpl_if name="use_rspamd"}

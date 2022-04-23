@@ -1,0 +1,4 @@
+From: {admin_name} <{admin_mail}>
+Subject: Vitajte vo Vašej novej emailovej schránke.
+
+Vitajte vo Vašej novej emailovej schránke. Váš správca.

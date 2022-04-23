@@ -4,4 +4,7 @@ $wb['tstamp_txt'] = 'Date';
 $wb['server_id_txt'] = 'Serveur';
 $wb['loglevel_txt'] = 'Niveau de log ';
 $wb['message_txt'] = 'Message';
+$wb['batch_delete_warnings_txt'] = 'Remove all warnings';
+$wb['batch_delete_errors_txt'] = 'Remove all errors';
+$wb['batch_delete_confirmation'] = 'Are you sure you want to acknowledge all log entries?'
 ?>

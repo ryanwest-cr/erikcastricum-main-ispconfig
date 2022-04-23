@@ -6,11 +6,11 @@
 
 [uidbasics]
 comment = common files for all jails that need user/group information
-paths = /lib/libnsl.so.1, /lib64/libnsl.so.1, /lib/libnss*.so.2, /lib64/libnss*.so.2, /lib/i386-linux-gnu/libnsl.so.1, /lib/i386-linux-gnu/libnss*.so.2, /lib/x86_64-linux-gnu/libnsl.so.1, /lib/x86_64-linux-gnu/libnss*.so.2, /lib/arm-linux-gnueabihf/libnsl*.so.1, /lib/arm-linux-gnueabihf/libnss*.so.2, /lib/aarch64-linux-gnu/libnsl.so.1, /lib/aarch64-linux-gnu/libnss*.so.2, /etc/nsswitch.conf, /etc/ld.so.conf
+paths = /lib*/libnsl.so.*, /lib*/libnss*.so.*, /lib/*/libnsl.so.*, /lib/*/libnss*.so.*, /etc/nsswitch.conf, /etc/ld.so.conf
 
 [netbasics]
 comment = common files for all jails that need any internet connectivity
-paths = /lib/libnss_dns.so.2, /lib64/libnss_dns.so.2, /lib/libnss_mdns*.so.2, /lib/i386-linux-gnu/libnss_dns.so.2, /lib/x86_64-linux-gnu/libnss_dns.so.2, /lib/arm-linux-gnueabihf/libnss_dns.so.2, /lib/aarch64-linux-gnu/libnss_dns.so.2, /etc/resolv.conf, /etc/host.conf, /etc/hosts, /etc/protocols, /etc/services, /etc/ssl/certs/, /usr/lib/ssl/certs
+paths = /lib*/libnss_dns.so.*, /lib*/libnss_mdns*.so.*, /lib/*/libnss_dns.so.*, /lib/*/libnss_mdns*.so.*, /etc/resolv.conf, /etc/host.conf, /etc/hosts, /etc/protocols, /etc/services, /etc/ssl/certs/, /usr/lib/ssl/certs
 
 [logbasics]
 comment = timezone information and log sockets
@@ -35,22 +35,20 @@ devices = /dev/null
 
 [git]
 comment = Fast Version Control System
-paths = /usr/bin/git*, /usr/lib/git-core, /usr/share/git-core, /usr/bin/pager
+paths = /usr/bin/git*, /usr/lib/git-core, /usr/share/git-core, pager
 includesections = editors, perl, netbasics, basicshell, coreutils
 
 [scp]
 comment = ssh secure copy
 paths = scp
 includesections = netbasics, uidbasics
-devices = /dev/urandom
+devices = /dev/urandom, /dev/null
 
 [sftp]
 comment = ssh secure ftp
 paths = /usr/lib/sftp-server, /usr/libexec/openssh/sftp-server, /usr/lib/misc/sftp-server, /usr/libexec/sftp-server, /usr/lib/openssh/sftp-server
 includesections = netbasics, uidbasics
 devices = /dev/urandom, /dev/null
-# on solaris 
-#paths = /usr/lib/ssh/sftp-server
 
 [ssh]
 comment = ssh secure shell
@@ -74,6 +72,10 @@ users = root
 groups = root
 includesections = uidbasics
 
+[interactiveshell]
+comment = for ssh access to a full shell
+includesections = uidbasics, basicshell, terminfo, editors, extendedshell
+
 [midnightcommander]
 comment = Midnight Commander
 paths = mc, mcedit, mcview, /usr/share/mc
@@ -85,7 +87,7 @@ paths = awk, bzip2, bunzip2, ldd, less, clear, cut, du, find, head, less, md5sum
 includesections = basicshell, midnightcommander, editors
 
 [terminfo]
-comment = terminfo databases, required for example for ncurses or vim 
+comment = terminfo databases, required for example for ncurses or vim
 paths = /etc/terminfo, /usr/share/terminfo, /lib/terminfo
 
 [editors]
@@ -94,8 +96,8 @@ includesections = terminfo
 paths = joe, nano, vi, vim, /etc/vimrc, /etc/joe, /usr/share/vim
 
 [netutils]
-comment = several internet utilities like wget, ftp, rsync, scp, ssh
-paths = wget, lynx, ftp, host, rsync, smbclient
+comment = several internet utilities like curl, wget, ftp, rsync, scp, ssh
+paths = curl, wget, lynx, ftp, host, rsync, smbclient
 includesections = netbasics, ssh, sftp, scp
 
 [apacheutils]
@@ -158,7 +160,7 @@ paths = cat, chgrp, chmod, chown, cp, date, dd, df, dir, echo, false, ln, ls, mk
 
 [wp]
 comment = WordPress Command Line
-paths = wp, /usr/local/bin/php
+paths = wp, which, mysqlcheck, tput, unrar, /usr/local/bin/php
 includesections = php, mysql-client
 
 [mysql-client]
@@ -173,7 +175,7 @@ includesections = php, uidbasics, netbasics
 
 [node]
 comment = NodeJS
-paths = npm, node, nodejs, /usr/lib/nodejs, /usr/share/npm, /usr/share/node-mime, /usr/lib/node_modules, /usr/local/lib/nodejs, /usr/local/lib/node_modules, elmi-to-json, /usr/local/bin/elmi-to-json
+paths = npm, npx, node, nodejs, semver, /usr/lib/nodejs, /usr/share/nodejs, /usr/share/npm, /usr/share/node-mime, /usr/lib/node_modules, /usr/local/lib/nodejs, /usr/local/lib/node_modules, /etc/npmrc, /etc/npmignore, elmi-to-json, /usr/local/bin/elmi-to-json
 
 [env]
 comment = /usr/bin/env for environment variables
@@ -226,11 +228,21 @@ comment = php version 7.4
 paths = /usr/bin/php7.4, /usr/lib/php/7.4/, /usr/lib/php/20190902/, /usr/share/php/7.4/, /etc/php/7.4/cli/, /etc/php/7.4/mods-available/
 includesections = php_common
 
-[imagemagick]
-comment = ImageMagick needed for php-imagemagick extension
-paths = /usr/share/ImageMagick-*, /etc/ImageMagick-*, /usr/lib/i386-linux-gnu/ImageMagick-*, /usr/lib/x86_64-linux-gnu/ImageMagick-*, /usr/lib/arm-linux-gnueabihf/ImageMagick-*, /usr/lib/aarch64-linux-gnu/ImageMagick-*
-
 [php8_0]
 comment = php version 8.0
 paths = /usr/bin/php8.0, /usr/lib/php/8.0/, /usr/lib/php/20200930/, /usr/share/php/8.0/, /etc/php/8.0/cli/, /etc/php/8.0/mods-available/
 includesections = php_common
+
+[php8_1]
+comment = php version 8.1
+paths = /usr/bin/php8.1, /usr/lib/php/8.1/, /usr/lib/php/20210902/, /usr/share/php/8.1/, /etc/php/8.1/cli/, /etc/php/8.1/mods-available/
+includesections = php_common
+
+[php8_2]
+comment = php version 8.2
+paths = /usr/bin/php8.2, /usr/lib/php/8.2/, /usr/lib/php/20210902/, /usr/share/php/8.2/, /etc/php/8.2/cli/, /etc/php/8.2/mods-available/
+includesections = php_common
+
+[imagemagick]
+comment = ImageMagick needed for php-imagemagick extension
+paths = /usr/share/ImageMagick-*, /etc/ImageMagick-*, /usr/lib/*/ImageMagick-*

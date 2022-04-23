@@ -30,6 +30,7 @@ $wb['manual_backup_title_txt'] = 'Ruční zálohování';
 $wb['make_backup_web_txt'] = 'Vytvořit zálohu webových souborů';
 $wb['make_backup_database_txt'] = 'Vytvořit zálohu databází';
 $wb['make_backup_confirm_txt'] = 'Chystáte se zahájit proces ručního zálohování. Ruční zálohy se započítávají do celkového počtu povolených záložních kopií: proto pokud bude limit překročen, mohou být nejstarší zálohy automaticky odstraněny. Pokračovat ?';
+$wb['final_size_txt'] = 'Konečná velikost stahování se může lišit v závislosti na zvoleném kompresním formátu.';
 $wb['yes_txt'] = 'Ano';
 $wb['no_txt'] = 'Ne';
 $wb['backup_is_encrypted_txt'] = 'Šifrované';

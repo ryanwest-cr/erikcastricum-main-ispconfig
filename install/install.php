@@ -160,8 +160,13 @@ if(!is_writable(dirname(ISPC_LOG_FILE))){
 	die("ERROR: Cannot write to the ".dirname(ISPC_LOG_FILE)." directory. Are you root or sudo ?\n\n");
 }
 
+//** Check for ISPConfig 2.x versions
 if(is_dir('/root/ispconfig') || is_dir('/home/admispconfig')) {
-	die('This software cannot be installed on a server wich runs ISPConfig 2.x.');
+	if(is_dir('/home/admispconfig')) {
+		die('This software cannot be installed on a server which runs ISPConfig 2.x.');
+	} else {
+		die('This software cannot be installed on a server which runs ISPConfig 2.x; the presence of the /root/ispconfig/ directory may indicate an ISPConfig 2.x installation, otherwise you can remove or rename it to continue.');
+	}
 }
 
 if(is_dir('/usr/local/ispconfig')) {
@@ -493,6 +498,12 @@ $force = @($conf['openvz']['installed']) ? true : $inst->force_configure_app('Op
 if($force) {
 	$conf['services']['vserver'] = true;
 	swriteln('Configuring OpenVZ');
+}
+
+// Configure AppArmor
+if($conf['apparmor']['installed']){
+  swriteln('Configuring AppArmor');
+  $inst->configure_apparmor();
 }
 
 if($install_mode == 'standard' || strtolower($inst->simple_query('Configure Firewall Server', array('y', 'n'), 'y','configure_firewall')) == 'y') {

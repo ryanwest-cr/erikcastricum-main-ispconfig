@@ -1,0 +1,13 @@
+MIME-Version: 1.0
+Content-type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+From: {admin_mail}
+Reply-To: {admin_mail}
+Subject: Veľkosť databázy ok
+
+Databáza {database_name} už nie je blízko ani neprekračuje limit veľkosti.
+
+Databáza:			{database_name}
+Využité miesto:		{used}
+Limit:				{quota}
+Percento využitia:	{ratio}

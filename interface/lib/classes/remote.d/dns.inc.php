@@ -42,7 +42,7 @@ class remoting_dns extends remoting {
 	// DNS Function --------------------------------------------------------------------------------------------------
 
 	//* Create Zone with Template
-	public function dns_templatezone_add($session_id, $client_id, $template_id, $domain, $ip, $ns1, $ns2, $email) {
+	public function dns_templatezone_add($session_id, $client_id, $template_id, $domain, $ip, $ns1, $ns2, $email, $ipv6 = '') {
 		global $app, $conf;
 		if(!$this->checkPerm($session_id, 'dns_templatezone_add')) {
 			throw new SoapFault('permission_denied', 'You do not have the permissions to access this function.');
@@ -63,6 +63,7 @@ class remoting_dns extends remoting {
 		$tpl_content = $template_record['template'];
 		if($domain != '') $tpl_content = str_replace('{DOMAIN}', $domain, $tpl_content);
 		if($ip != '') $tpl_content = str_replace('{IP}', $ip, $tpl_content);
+		if($ipv6 != '') $tpl_content = str_replace('{IPV6}', $ipv6, $tpl_content);
 		if($ns1 != '') $tpl_content = str_replace('{NS1}', $ns1, $tpl_content);
 		if($ns2 != '') $tpl_content = str_replace('{NS2}', $ns2, $tpl_content);
 		if($email != '') $tpl_content = str_replace('{EMAIL}', $email, $tpl_content);
@@ -248,7 +249,7 @@ class remoting_dns extends remoting {
 			return false;
 		}
 
-		if(!preg_match('/^[\w\.\-]{2,64}\.[a-zA-Z0-9\-]{2,63}$/', $origin)){
+		if(!preg_match('/^[\w\.\-]{1,64}\.[a-zA-Z0-9\-]{2,63}$/', $origin)){
 			throw new SoapFault('no_domain_found', 'Invalid domain name.');
 			return false;
 		}
@@ -513,6 +514,29 @@ class remoting_dns extends remoting {
 		return $this->dns_rr_delete($session_id, $primary_id, $update_serial, 'HINFO');
 	}
 
+
+	// ----------------------------------------------------------------------------------------------------------------
+
+	//* Get record details
+	public function dns_loc_get($session_id, $primary_id) {
+		return $this->dns_rr_get($session_id, $primary_id, 'LOC');
+	}
+
+	//* Add a record
+	public function dns_loc_add($session_id, $client_id, $params, $update_serial=false) {
+		return $this->dns_rr_add($session_id, $client_id, $params, $update_serial, 'LOC');
+	}
+
+	//* Update a record
+	public function dns_loc_update($session_id, $client_id, $primary_id, $params, $update_serial=false) {
+		return $this->dns_rr_update($session_id, $client_id, $primary_id, $params, $update_serial, 'LOC');
+	}
+
+	//* Delete a record
+	public function dns_loc_delete($session_id, $primary_id, $update_serial=false) {
+		return $this->dns_rr_delete($session_id, $primary_id, $update_serial, 'LOC');
+	}
+
 	// ----------------------------------------------------------------------------------------------------------------
 
 	//* Get record details
@@ -577,6 +601,28 @@ class remoting_dns extends remoting {
 	//* Delete a record
 	public function dns_ns_delete($session_id, $primary_id, $update_serial=false) {
 		return $this->dns_rr_delete($session_id, $primary_id, $update_serial, 'NS');
+	}
+
+	// ----------------------------------------------------------------------------------------------------------------
+
+	//* Get record details
+	public function dns_ds_get($session_id, $primary_id) {
+		return $this->dns_rr_get($session_id, $primary_id, 'DS');
+	}
+
+	//* Add a record
+	public function dns_ds_add($session_id, $client_id, $params, $update_serial=false) {
+		return $this->dns_rr_add($session_id, $client_id, $params, $update_serial, 'DS');
+	}
+
+	//* Update a record
+	public function dns_ds_update($session_id, $client_id, $primary_id, $params, $update_serial=false) {
+		return $this->dns_rr_update($session_id, $client_id, $primary_id, $params, $update_serial, 'DS');
+	}
+
+	//* Delete a record
+	public function dns_ds_delete($session_id, $primary_id, $update_serial=false) {
+		return $this->dns_rr_delete($session_id, $primary_id, $update_serial, 'DS');
 	}
 
 	// ----------------------------------------------------------------------------------------------------------------

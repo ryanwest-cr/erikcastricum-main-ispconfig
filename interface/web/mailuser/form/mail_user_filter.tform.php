@@ -94,7 +94,6 @@ $form["tabs"]['filter'] = array (
 			'datatype' => 'VARCHAR',
 			'formtype' => 'SELECT',
 			'default' => '',
-			//'value'  => array('contains'=>'contains_txt','is' => 'Is','begins'=>'Begins with','ends'=>'Ends with')
 			'value'  => array('contains'=>'contains_txt', 'is'=>'is_txt', 'begins'=>'begins_with_txt', 'ends'=>'ends_with_txt', 'regex'=>'regex_txt', 'localpart'=>'localpart_txt', 'domain'=>'domain_txt')
 		),
 		'searchterm' => array (
@@ -122,7 +121,7 @@ $form["tabs"]['filter'] = array (
 			'datatype' => 'VARCHAR',
 			'formtype' => 'TEXT',
 			'validators' => array (  0 => array ( 'type' => 'REGEX',
-					'regex' => '/^[\p{Latin}0-9\.\-\_\ \&\/]{0,100}$/u',
+					'regex' => '/^[\p{Latin}0-9\.\'\-\_\ \&\/]{0,100}$/u',
 					'errmsg'=> 'target_error_regex'),
 			),
 			'default' => '',

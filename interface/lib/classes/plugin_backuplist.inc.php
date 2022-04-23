@@ -160,7 +160,7 @@ class plugin_backuplist extends plugin_base {
 
 		//* Get the data
 		$server_ids = array();
-		$web = $app->db->queryOneRecord("SELECT server_id FROM web_domain WHERE domain_id = ?", $this->form->id);
+		$web = $app->db->queryOneRecord("SELECT server_id, backup_format_web, backup_format_db, backup_password, backup_encrypt FROM web_domain WHERE domain_id = ?", $this->form->id);
 		$databases = $app->db->queryAllRecords("SELECT server_id FROM web_database WHERE parent_domain_id = ?", $this->form->id);
 		if($app->functions->intval($web['server_id']) > 0) $server_ids[] = $app->functions->intval($web['server_id']);
 		if(is_array($databases) && !empty($databases)){
@@ -181,8 +181,33 @@ class plugin_backuplist extends plugin_base {
 				$rec["bgcolor"] = $bgcolor;
 
 				$rec['date'] = date($app->lng('conf_format_datetime'), $rec['tstamp']);
+
 				$backup_format = $rec['backup_format'];
-				if (empty($backup_format)) {
+				$backup_mode = $rec['backup_mode'];
+				if ($backup_mode === 'borg') {
+					// Get backup format from domain config
+					switch ($rec['backup_type']) {
+						case 'mysql':
+							$backup_format = $web['backup_format_db'];
+							if (empty($backup_format) || $backup_format == 'default') {
+								$backup_format = self::getDefaultBackupFormat('rootgz', 'mysql');
+							}
+							$rec['filename'] .= self::getBackupDbExtension($backup_format);
+							break;
+						case 'web':
+							$backup_format = $web['backup_format_web'];
+							if (empty($backup_format) || $backup_format == 'default') {
+								$backup_format = self::getDefaultBackupFormat($backup_mode, 'web');
+							}
+							$rec['filename'] .= self::getBackupWebExtension($backup_format);
+							break;
+						default:
+							$app->log('Unsupported backup type "' . $rec['backup_type'] . '" for backup id ' . $rec['backup_id'], LOGLEVEL_ERROR);
+							break;
+					}
+					$rec['backup_password'] = $web['backup_encrypt'] == 'y' ? trim($web['backup_password']) : '';
+
+				} elseif (empty($backup_format)) {
 					//We have a backup from old version of ISPConfig
 					switch ($rec['backup_type']) {
 						case 'mysql':
@@ -210,7 +235,13 @@ class plugin_backuplist extends plugin_base {
 				if($rec['server_id'] != $web['server_id']) $rec['download_available'] = false;
 
 				if($rec['filesize'] > 0){
-					$rec['filesize'] = $app->functions->currency_format($rec['filesize']/(1024*1024), 'client').' MB';
+					$rec['filesize'] = $app->functions->currency_format($rec['filesize']/(1024*1024), 'client').'&nbsp;MB';
+					if($backup_mode === "borg") {
+						$rec['filesize'] = '<a href="javascript:void(0)" data-toggle="tooltip" title="'
+											. $wb['final_size_txt']
+											. '"><strong>*</strong></a>'
+											. $rec['filesize'];
+					}
 				}
 
 				$records_new[] = $rec;
@@ -233,6 +264,73 @@ class plugin_backuplist extends plugin_base {
 		$_SESSION["s"]["form"]["return_to"] = $list_name;
 
 		return $listTpl->grab();
+	}
+
+	/**
+	 * Returns file extension for specified backup format
+	 * @param string $format backup format
+	 * @return string|null
+	 * @author Ramil Valitov <ramilvalitov@gmail.com>
+	 */
+	protected static function getBackupDbExtension($format)
+	{
+		$prefix = '.sql';
+		switch ($format) {
+			case 'gzip':
+				return $prefix . '.gz';
+			case 'bzip2':
+				return $prefix . '.bz2';
+			case 'xz':
+				return $prefix . '.xz';
+			case 'zip':
+			case 'zip_bzip2':
+				return '.zip';
+			case 'rar':
+				return '.rar';
+		}
+		if (strpos($format, "7z_") === 0) {
+			return $prefix . '.7z';
+		}
+		return null;
+	}
+
+	/**
+	 * Returns file extension for specified backup format
+	 * @param string $format backup format
+	 * @return string|null
+	 * @author Ramil Valitov <ramilvalitov@gmail.com>
+	 */
+	protected static function getBackupWebExtension($format)
+	{
+		switch ($format) {
+			case 'tar_gzip':
+				return '.tar.gz';
+			case 'tar_bzip2':
+				return '.tar.bz2';
+			case 'tar_xz':
+				return '.tar.xz';
+			case 'zip':
+			case 'zip_bzip2':
+				return '.zip';
+			case 'rar':
+				return '.rar';
+		}
+		if (strpos($format, "tar_7z_") === 0) {
+			return '.tar.7z';
+		}
+		return null;
+	}
+
+	protected static function getDefaultBackupFormat($backup_mode, $backup_type)
+	{
+		//We have a backup from old version of ISPConfig
+		switch ($backup_type) {
+			case 'mysql':
+				return 'gzip';
+			case 'web':
+				return ($backup_mode == 'userzip') ? 'zip' : 'tar_gzip';
+		}
+		return "";
 	}
 
 }
